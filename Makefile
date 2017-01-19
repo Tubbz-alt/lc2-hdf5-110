@@ -4,7 +4,14 @@ CFLAGS=-c -Wall -Iinclude -I$(PREFIX)/include -fPIC
 
 LDFLAGS=-L$(PREFIX)/lib -Llib -Wl,--enable-new-dtags -Wl,-rpath='$$ORIGIN:$$ORIGIN/../lib:$(PREFIX)/lib' -lmpi -lmpi_cxx -lhdf5 -lhdf5_hl -lhdf5_cpp -lsz -lopen-rte -lopen-pal
 
-all: lib/libana_daq_util.so bin/daq_writer bin/daq_master bin/ana_reader_master bin/ana_reader_stream
+all: lib/libana_daq_util.so bin/daq_writer bin/daq_master bin/ana_reader_master bin/ana_reader_stream bin/ana_daq_driver
+
+#### DRIVER
+bin/ana_daq_driver: src/ana_daq_driver.py
+	ln -s ../python/ana_daq_driver.py bin/ana_daq_driver
+	chmod a+x bin/ana_daq_driver
+
+src/ana_daq_driver.py:
 
 #### LIB
 lib/libana_daq_util.so: build/ana_daq_util.o
@@ -49,8 +56,9 @@ test:
 	bin/daq_master
 	bin/ana_reader_master
 	bin/ana_reader_stream
+	bin/ana_daq_driver
 
 #### clean
 clean:
-	rm lib/libana_daq_util.so build/*.o bin/daq_writer bin/daq_master bin/ana_reader_master bin/ana_reader_stream
+	rm lib/libana_daq_util.so build/*.o bin/daq_writer bin/daq_master bin/ana_reader_master bin/ana_reader_stream bin/ana_daq_driver
 
