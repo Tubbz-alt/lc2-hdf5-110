@@ -1,15 +1,20 @@
-output:
-  root: /reg/d/ana01/temp/davidsch/lc2
-  lfs:
-    do_stripe: True
-    stripe_size_mb: 1
-    OST_start_index: -1
-    count: 19
-
+# options that can be overriden from the command line
+force: False
+rootdir: /reg/d/ana01/temp/davidsch/lc2
+rundir: runA
 num_samples: 1e6
 verbose: 1
 flush_interval: 100
+time: 0
+writers_hang: False
   
+# config file only options
+lfs:
+  do_stripe: True
+  stripe_size_mb: 1
+  OST_start_index: -1
+  count: 19
+
 daq_writers:
   num: 3
   num_per_host: 3
@@ -23,9 +28,9 @@ daq_writers:
     vlen:
       num: 10
       chunksize: 10000
+      shots_per_sample: 1
       min_per_shot: 5
       max_per_shot: 15
-      shots_per_sample: 1
     detector:
       num: 1
       chunksize: 1
@@ -33,25 +38,24 @@ daq_writers:
       dim:
         - 1024
         - 1024
-  
-  
+    
 daq_master:
   num: 1
-  hosts: psanagpu103
   num_per_host: 1
+  hosts: 
+    - local
   
 ana_reader_master:
   # num processes analyzing data through the master
-  num: 20
+  num: 1
+  num_per_host: 1
   hosts:
-    - psanaphi101
-    - psanaphi102
-  num_per_host: 10
+    - local
   
 ana_reader_stream:
-  # num processes directly reading daq stream files (the first few)
-  num: 5
+  # num processes directly reading daq stream files
+  num: 1
+  num_per_host: 1
   hosts:
-    - psanaphi103
-  num_per_host: 5
+    - local
   

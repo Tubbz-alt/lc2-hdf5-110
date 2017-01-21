@@ -8,13 +8,12 @@ import time
 import shutil
 import yaml
 import platform
-import getpass
 import paramiko as pm
 import argparse
 from pprint import pprint
 
 import ana_daq_util as util
-
+from job_manager import Jobs
 
 DESCRIPTION='''
 driver for ana daq prototype using hdf5 1.10 swmr/mwmr/virtual dataset
@@ -32,10 +31,22 @@ def getParser():
                                      epilog=EPILOG)
     parser.add_argument('--force', action='store_true',
                         help="overwrite existing files, clean out working dir")
-    parser.add_argument('-p', '--prefix', type=str, 
-                        help="name of subdirectory from root dir to run from", default=None)
+    parser.add_argument('--rootdir', type=str, 
+                        help="root directory for all runs")
+    parser.add_argument('--rundir', type=str, 
+                        help="run directory for this simulation")
     parser.add_argument('-c', '--config', type=str, 
-                        help="config file", default=None)
+                        help="config file")
+    parser.add_argument('--verbose', type=int,
+                        help='verbosity')
+    parser.add_argument('--flush_interval', type=int,
+                        help='how many events between flushes')
+    parser.add_argument('--time', type=int, 
+                        help='number of seconds to run for, kill after that.')
+    parser.add_argument('--kill', action='store_true',
+                        help='kill any jobs in progress for the given prefix/config')
+    parser.add_argument('--writers_hang', action='store_true',
+                        help="have writers hang when done")
     return parser
 
 
@@ -109,31 +120,32 @@ def divide_datasets_between_writers(config):
     return writers
 
 
-def prepare_output_directory(config, args):
-    basedir = config['output']['root']
-    expdir = os.path.join(basedir, args.prefix)
-    if os.path.exists(expdir):
-        if args.force:
-            print("ana_daq_driver: Removing directory %s" % expdir)
-            shutil.rmtree(expdir)
+def prepare_output_directory(config):
+    rundir = os.path.join(config['rootdir'], config['rundir'])
+    if os.path.exists(rundir):
+        if config['force']:
+            print("ana_daq_driver: Removing directory %s" % rundir)
+            shutil.rmtree(rundir)
         else:
             print("FATAL: the directory %s exists, and --force was not given. "
-                  "Use a different --prefix or pass --force to overwrite" % expdir)
+                  "Use a different value for --rundir or pass --force to overwrite" % rundir)
             sys.exit(1)
             
-    os.mkdir(expdir)
-    hdf5_path = os.path.join(expdir, 'hdf5')
-    log_path =  os.path.join(expdir, 'logs')
-    results_path =  os.path.join(expdir, 'results')
+    os.mkdir(rundir)
+    hdf5_path = os.path.join(rundir, 'hdf5')
+    log_path =  os.path.join(rundir, 'logs')
+    pid_path =  os.path.join(rundir, 'pids')
+    results_path =  os.path.join(rundir, 'results')
 
     os.mkdir(hdf5_path)
     os.mkdir(log_path)
     os.mkdir(results_path)
+    os.mkdir(pid_path)
     
-    if config['output']['lfs']['do_stripe']:
-        stripe_size_mb = config['output']['lfs']['stripe_size_mb']
-        OST_start_index = config['output']['lfs']['OST_start_index']
-        count = config['output']['lfs']['count']
+    if config['lfs']['do_stripe']:
+        stripe_size_mb = config['lfs']['stripe_size_mb']
+        OST_start_index = config['lfs']['OST_start_index']
+        count = config['lfs']['count']
         assert isinstance(stripe_size_mb, int)
         assert stripe_size_mb>=1 and stripe_size_mb < 1024
         stripe_size = stripe_size_mb << 20
@@ -144,43 +156,51 @@ def prepare_output_directory(config, args):
        
  
 def construct_daq_writer_command_lines(daq_writers, config, args):
-    command_lines = []
-    h5dir = os.path.join(config['output']['root'], args.prefix, 'hdf5')
-    logdir = os.path.join(config['output']['root'], args.prefix, 'logs')
+    rundir = os.path.join(config['rootdir'], config['rundir'])
+    h5dir = os.path.join(rundir, 'hdf5')
+    logdir = os.path.join(rundir, 'logs')
+    piddir = os.path.join(rundir, 'pids')
     assert os.path.exists(h5dir)
     assert os.path.exists(logdir)
+    assert os.path.exists(piddir)
+
+    group = 'daq_writers'
+    command_lines = []
     for idx, writer in enumerate(daq_writers):
-        fname = '%s-s%4.4d' % (args.prefix, idx) 
-        h5output = os.path.join(h5dir, fname + '.h5')
-        logstd = os.path.join(logdir, fname + '.stdout.log')
-        logerr = os.path.join(logdir, fname + '.stderr.log')
         num_shots = int(round(float(config['num_samples'])))
-        small_name_first = writer['small']['first_dset']
-        vlen_name_first = writer['vlen']['first_dset']
-        detector_name_first = writer['detector']['first_dset']
-        small_name_count = writer['small']['num_dsets']
-        vlen_name_count = writer['vlen']['num_dsets']
-        detector_name_count = writer['detector']['num_dsets']
-        small_shot_first = writer['small']['start']
-        vlen_shot_first =  writer['vlen']['start']
-        detector_shot_first =  writer['detector']['start']
-        small_shot_stride = writer['small']['stride']
-        vlen_shot_stride = writer['vlen']['stride']
-        detector_shot_stride = writer['detector']['stride']
-        small_chunksize = config['daq_writers']['datasets']['small']['chunksize']
-        vlen_chunksize = config['daq_writers']['datasets']['vlen']['chunksize']
-        detector_chunksize = config['daq_writers']['datasets']['detector']['chunksize']
-        vlen_min_per_shot = config['daq_writers']['datasets']['vlen']['min_per_shot']
-        vlen_max_per_shot = config['daq_writers']['datasets']['vlen']['max_per_shot']
-        detector_rows = config['daq_writers']['datasets']['detector']['dim'][0]
-        detector_columns = config['daq_writers']['datasets']['detector']['dim'][1]
-        flush_interval = config['flush_interval']
-        
-        cmd = 'bin/daq_writer %d %s %s %s ' % \
-              (config['verbose'],
-               h5output,
-               logstd,
-               logerr)
+        small_name_first = int(writer['small']['first_dset'])
+        vlen_name_first = int(writer['vlen']['first_dset'])
+        detector_name_first = int(writer['detector']['first_dset'])
+        small_name_count = int(writer['small']['num_dsets'])
+        vlen_name_count = int(writer['vlen']['num_dsets'])
+        detector_name_count = int(writer['detector']['num_dsets'])
+        small_shot_first = int(writer['small']['start'])
+        vlen_shot_first = int(writer['vlen']['start'])
+        detector_shot_first = int(writer['detector']['start'])
+        small_shot_stride = int(writer['small']['stride'])
+        vlen_shot_stride = int(writer['vlen']['stride'])
+        detector_shot_stride = int(writer['detector']['stride'])
+        small_chunksize = int(config['daq_writers']['datasets']['small']['chunksize'])
+        vlen_chunksize = int(config['daq_writers']['datasets']['vlen']['chunksize'])
+        detector_chunksize = int(config['daq_writers']['datasets']['detector']['chunksize'])
+        vlen_min_per_shot = int(config['daq_writers']['datasets']['vlen']['min_per_shot'])
+        vlen_max_per_shot = int(config['daq_writers']['datasets']['vlen']['max_per_shot'])
+        detector_rows = int(config['daq_writers']['datasets']['detector']['dim'][0])
+        detector_columns = int(config['daq_writers']['datasets']['detector']['dim'][1])
+        flush_interval = int(config['flush_interval'])
+        writers_hang = int(config['writers_hang'])
+
+        cmdlog_basename = '%s-r%4.4d.cmd.log' % (group, idx)
+        cmdlog = os.path.join(logdir, cmdlog_basename)
+        program = os.path.abspath('bin/daq_writer')
+        path = os.environ['PATH']
+        cmd = 'LD_LIBRARY_PATH="" PYTHONPATH="" PATH=%s %s %d %s %s %d ' % \
+              (path,
+               program,
+               int(config['verbose']),
+               rundir,
+               group,
+               idx)
         cmd += ' '.join(map(str,[num_shots,
                                  small_name_first,
                                  vlen_name_first,
@@ -201,13 +221,86 @@ def construct_daq_writer_command_lines(daq_writers, config, args):
                                  vlen_max_per_shot,
                                  detector_rows,
                                  detector_columns,
-                                 flush_interval]))
+                                 flush_interval,
+                                 writers_hang]))
+        cmd += ' >%s 2>&1' % cmdlog
         command_lines.append(cmd)
     return command_lines
 
 
+def check_structure(config):
+    structure = {'force':'value',
+                 'rootdir':'value',
+                 'rundir':'value',
+                 'num_samples':'value',
+                 'verbose':'value',
+                 'flush_interval':'value',
+                 'time':'value',
+                 'writers_hang':'value',
+                 'lfs':{'do_stripe':'value',
+                        'stripe_size_mb':'value',
+                        'OST_start_index':'value',
+                        'count':'value',
+                    },
+                 'daq_writers':{'num':'value',
+                                'num_per_host':'value',
+                                'hosts':'list',
+                                'datasets':{'small':{'num':'value',
+                                                     'chunksize':'value',
+                                                     'shots_per_sample':'value',
+                                                     },
+                                            'vlen':{'num':'value',
+                                                    'chunksize':'value',
+                                                    'shots_per_sample':'value',
+                                                    'min_per_shot':'value',
+                                                    'max_per_shot':'value',
+                                                    
+                                                     },
+                                            'detector':{'num':'value',
+                                                        'chunksize':'value',
+                                                        'shots_per_sample':'value',
+                                                        'dim':'list'
+                                                     },
+                                        },
+                            },
+                 'daq_master':{'num':'value',
+                               'num_per_host':'value',
+                               'hosts':'list',
+                               },
+                 'ana_reader_master':{'num':'value',
+                                'num_per_host':'value',
+                                'hosts':'list',
+                               
+                                  },
+                 'ana_reader_stream':{'num':'value',
+                                'num_per_host':'value',
+                                'hosts':'list',
+                               },
+             }
+    def recurse_check(correct, config, stack):
+        assert isinstance(correct, dict), "check is not a dict at %s" % stack
+        assert isinstance(config, dict), "config is not a dict at %s" % stack
+        assert len(correct)==len(config), "%s should have %d items, but it has %d" % \
+            (stack, len(correct), len(config))
+        for ky, value in correct.items():
+            assert ky in config, "config at %s is missing %s" % (stack, ky)
+            if isinstance(value, dict):
+                recurse_check(value, config[ky], [xx for xx in stack] + [ky])
+            else:
+                assert value in ['value','list']
+                if value == 'value':
+                    isval = isinstance(config[ky],str) or isinstance(config[ky],int) or \
+                            isinstance(config[ky],float) or isinstance(config[ky],bool)
+                    assert isval, "%s is not a value, it is %s" % (stack, config[ky])
+                elif value == 'list':
+                    assert isinstance(config[ky],list)
+
+    recurse_check(structure, config, ['root'])
+
+
 def check_config(config):
-    assert os.path.exists(config['output']['root'])
+    check_structure(config)
+    assert os.path.exists(config['rootdir'])
     for group in ['daq_writers','ana_reader_master', 'ana_reader_stream']:
         cfg = config[group]
         if cfg['num']<=0:
@@ -218,6 +311,12 @@ def check_config(config):
         hosts_needed = int(math.ceil(cfg['num']/cfg['num_per_host']))
         assert hosts_needed <= num_hosts, ("%s: not enought hosts (%d) to support " + \
                                            "%d processes at %d per host") % (group, num_hosts, cfg['num'], cfg['num_per_host'])
+    vlen_min = config['daq_writers']['datasets']['vlen']['min_per_shot']
+    vlen_max = config['daq_writers']['datasets']['vlen']['max_per_shot']
+    assert vlen_min <= vlen_max, "vlen min > max"
+    detdim = config['daq_writers']['datasets']['detector']['dim']
+    assert isinstance(detdim, list)
+    assert 2 == len(detdim), "detector dim must have 2 values"
 
 
 def assign_hosts(group, config):
@@ -228,63 +327,7 @@ def assign_hosts(group, config):
     hosts = [all_hosts[idx//cfg['num_per_host']] for idx in range(cfg['num'])]
     return hosts
 
-
-class Jobs(object):
-    def __init__(self, config):
-        self.config = config
-        self.host2ssh = {}
-        for group in ['daq_writers', 'ana_reader_master', 'ana_reader_stream']:
-            for host in config[group]['hosts']:
-                if host not in self.host2ssh:
-                    self.host2ssh[host]=None
-        self.username = getpass.getuser()
-        assert self.username, "no username found"
-        self._launched = []
-        
-    def _makeSSH(self, host):
-        if host == 'local':
-            host = platform.node()
-            print("local host is %s" % host)
-        ssh = pm.SSHClient()
-        ssh.set_missing_host_key_policy(pm.AutoAddPolicy())
-        print("using paramiko to make ssh connection to host=%s as username=%s" % (host, self.username))
-        ssh.connect(host, self.username)
-        return ssh
-    
-    def launch(self, group, commands, hosts):
-        assert len(commands)==len(hosts)
-        idx = -1
-        for command, host in zip(commands, hosts):
-            idx += 1
-            if self.host2ssh[host] is None:
-                self.host2ssh[host] = self._makeSSH(host)
-            ssh = self.host2ssh[host]
-            print("launching: group=%s idx=%d" % (group,idx))
-            stdin, stdout, stderr = ssh.exec_command(command)
-            execdict = {'stdin':stdin, 'stdout':stdout, 'stderr':stderr,
-                        'command':command, 'host':host, 'group':group, 'idx':idx}
-            self._launched(execdict)
-
-    def wait(self):
-        for execdict in self._launched:
-            res = execdict['stdout'].channel.recv_exit_status()
-            group = execdict['group']
-            idx = execdict['idx']
-            stdout = '\n  '.join(execdict['stdout'].readlines())
-            stderr = '\n  '.join(execdict['stderr'].readlines())
-            host = execdict['host']
-            command = execdict['command']
-            if res != 0:
-                msg = "*FAIL:    "
-            else:
-                msg = "*SUCCESS: "
-            msg += "group=%s idx=%d host=%s res=%d command:\n"
-            msg += "  %s\n" % command
-            msg += "stdout:\n  %s" % stdout
-            msg += "stderr:\n  %s" % stderr
-            print(msg)
-    
-
+  
 def run(argv):
     parser = getParser()
     args = parser.parse_args(argv[1:])
@@ -292,16 +335,26 @@ def run(argv):
         assert os.path.exists('config.yaml'), "use --config to specify config file"
         print("using config.yaml for configuration")
         args.config = 'config.yaml'
-    assert args.prefix, "use --prefix to specify prefix, subdir to root for output"
     
     config = yaml.load(open(args.config,'r'))
     check_config(config)
-    prepare_output_directory(config, args)
+    for ky in ['force','rootdir','rundir','verbose','flush_interval','time','writers_hang']:
+        val = getattr(args,ky)
+        if val in [None, False]: continue
+        print("replacing config[%s] with %s (from command line)" % (ky,val))
+        config[ky]=val
+
+    jobs = Jobs(config)
+
+    if args.kill:
+        jobs.kill_all()
+        return
+
+    prepare_output_directory(config)
     daq_writers = divide_datasets_between_writers(config)
     daq_writer_commands = construct_daq_writer_command_lines(daq_writers, config, args)
     daq_writer_hosts = assign_hosts('daq_writers', config)
 
-    jobs = Jobs(config)
     jobs.launch('daq_writers', daq_writer_commands, daq_writer_hosts)
     time.sleep(1)
     jobs.wait()

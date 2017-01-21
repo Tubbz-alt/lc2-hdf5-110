@@ -1,31 +1,26 @@
 PREFIX=/reg/neh/home/davidsch/.conda/envs/lc2
 CC=g++
-CFLAGS=-c -Wall -Iinclude -I$(PREFIX)/include -fPIC
+CFLAGS=--std=c++11 -c -Wall -Iinclude -I$(PREFIX)/include -fPIC
 
 LDFLAGS=-L$(PREFIX)/lib -Llib -Wl,--enable-new-dtags -Wl,-rpath='$$ORIGIN:$$ORIGIN/../lib:$(PREFIX)/lib' -lmpi -lmpi_cxx -lhdf5 -lhdf5_hl -lhdf5_cpp -lsz -lopen-rte -lopen-pal
 
 .PHONY: all clean
 
-all: lib/libana_daq_util.so bin/daq_writer bin/daq_master bin/ana_reader_master bin/ana_reader_stream # bin/ana_daq_driver
+all: lib/libana_daq_util.so bin/daq_writer bin/daq_master bin/ana_reader_master bin/ana_reader_stream bin/ana_daq_driver
 
 #### DRIVER
-#bin/ana_daq_driver: src/ana_daq_driver.py
-#	rm -f bin/ana_daq_driver
-#	ln -s ../python/ana_daq_driver.py bin/ana_daq_driver
-#	chmod a+x bin/ana_daq_driver
-
-# causes everything to get built
-#src/ana_daq_driver.py:
+bin/ana_daq_driver:
+	ln -s ../python/ana_daq_driver.py bin/ana_daq_driver
+	chmod a+x bin/ana_daq_driver
 
 #### LIB
 lib/libana_daq_util.so: build/ana_daq_util.o
 	$(CC) -shared $(LDFLAGS) $< -o $@
 
-build/ana_daq_util.o: src/ana_daq_util.cpp # src/ana_daq_util.h
+build/ana_daq_util.o: src/ana_daq_util.cpp include/ana_daq_util.h
 	$(CC) $(CFLAGS) $< -o $@
 
-#  this causes everyting to get built
-#src/ana_daq_util.h:
+include/ana_daq_util.h:
 
 #### DAQ STREAM WRITER
 bin/daq_writer: build/daq_writer.o lib/libana_daq_util.so
