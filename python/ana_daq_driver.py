@@ -45,6 +45,8 @@ def getParser():
                         help='number of seconds to run for, kill after that.')
     parser.add_argument('--kill', action='store_true',
                         help='kill any jobs in progress for the given prefix/config')
+    parser.add_argument('--writer', action='store_true',
+                        help='run one writer from local, for testing')
     parser.add_argument('--writers_hang', action='store_true',
                         help="have writers hang when done")
     return parser
@@ -190,7 +192,7 @@ def construct_daq_writer_command_lines(daq_writers, config, args):
         flush_interval = int(config['flush_interval'])
         writers_hang = int(config['writers_hang'])
 
-        cmdlog_basename = '%s-r%4.4d.cmd.log' % (group, idx)
+        cmdlog_basename = '%s-s%4.4d.cmd.log' % (group, idx)
         cmdlog = os.path.join(logdir, cmdlog_basename)
         program = os.path.abspath('bin/daq_writer')
         path = os.environ['PATH']
@@ -223,7 +225,8 @@ def construct_daq_writer_command_lines(daq_writers, config, args):
                                  detector_columns,
                                  flush_interval,
                                  writers_hang]))
-        cmd += ' >%s 2>&1' % cmdlog
+        if not args.writer:
+            cmd += ' >%s 2>&1' % cmdlog
         command_lines.append(cmd)
     return command_lines
 
@@ -353,6 +356,15 @@ def run(argv):
     prepare_output_directory(config)
     daq_writers = divide_datasets_between_writers(config)
     daq_writer_commands = construct_daq_writer_command_lines(daq_writers, config, args)
+
+    if args.writer:
+        print("=======")
+        print(" running daq_writer")
+        cmd = daq_writer_commands[0]
+        print(cmd)
+        os.system(cmd)
+        return
+        
     daq_writer_hosts = assign_hosts('daq_writers', config)
 
     jobs.launch('daq_writers', daq_writer_commands, daq_writer_hosts)

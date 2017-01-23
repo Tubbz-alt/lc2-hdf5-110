@@ -129,50 +129,66 @@ void DaqWriterConfig::dump(FILE *fout) {
 }
 
 class DaqWriter {
-  DaqWriterConfig config;
-  std::string basename, fname_h5, fname_log, fname_pid, fname_finished;
-  FILE *log;
+  DaqWriterConfig m_config;
+  std::string m_basename, m_fname_h5, m_fname_pid, m_fname_finished;
 
-  hid_t m_fid, m_fapl, m_smallGroup, m_vlenGroup, m_detectorGroup;
+  hid_t m_fid, m_fapl, m_small_group, m_vlen_group, m_detector_group;
 
-  std::map<int, hid_t> m_smallDsetGroups, m_vlenDsetGroups, m_detectorDsetGroups;
+  std::map<int, hid_t> m_small_id_to_group,
+    m_vlen_id_to_group,
+    m_detector_id_to_group;
 
-  Clock t0, t1;
+  std::map<int, hid_t> m_small_id_to_fiducials_dset,
+    m_vlen_id_to_fiducials_dset,
+    m_detector_id_to_fiducials_dset;
+
+  std::map<int, hid_t> m_small_id_to_nano_dset,
+    m_vlen_id_to_nano_dset,
+    m_detector_id_to_nano_dset;
+
+  std::map<int, hid_t> m_small_id_to_data_dset,
+    m_vlen_id_to_blob_dset,
+    m_detector_id_to_data_dset;
+
+  std::map<int, hid_t> m_vlen_id_to_blob_start_dset,
+    m_vlen_id_to_blob_cound_dset;
+  
+  std::chrono::time_point<Clock> m_t0, m_t1;
 
 public:
   DaqWriter(const DaqWriterConfig & config_arg);
   ~DaqWriter();
 
   void run();
-  void createFile();
-  void createAllGroupsDatasetsAndAttributes();
+  void create_file();
+  void create_all_groups_datasets_and_attributes();
   void start_SWMR_access_to_file();
   void write(long fiducial);
-  void flushData();
+  void flush_data();
 
 protected:
-  void check_nonneg(herr_t, int);
+  void create_dset_groups(hid_t, std::map<int, hid_t> &, int, int);
+  void create_fiducials_dsets(const std::map<int, hid_t> &, std::map<int, hid_t> &);
+  void create_nano_dsets(const std::map<int, hid_t> &, std::map<int, hid_t> &);
+
+  void create_small_data_dsets();
+  void create_detector_data_dsets();
+  void create_vlen_blob_dsets();
+
   void write_pid_file();
-  void createDsetGroups(hid_t, std::map<int, hid_t> &, int, int);
 };
 
 
 DaqWriter::DaqWriter(const DaqWriterConfig & config_arg)
-  : config(config_arg)
+  : m_config(config_arg)
 {
   static char idstr[128];
-  sprintf(idstr, "%4.4d", config.id);
-  basename = config.group + "-r" + idstr;
-  fname_h5 = config.rundir + "/hdf5/" + basename + ".h5";
-  fname_log = config.rundir + "/logs/" + basename + ".log"; 
-  fname_pid = config.rundir + "/pids/" + basename + ".pid";
-  fname_finished = config.rundir + "/logs/" + basename + ".finished";
+  sprintf(idstr, "%4.4d", m_config.id);
+  m_basename = m_config.group + "-s" + idstr;
+  m_fname_h5 = m_config.rundir + "/hdf5/" + m_basename + ".h5";
+  m_fname_pid = m_config.rundir + "/pids/" + m_basename + ".pid";
+  m_fname_finished = m_config.rundir + "/logs/" + m_basename + ".finished";
   write_pid_file();
-  log = fopen(fname_log.c_str(),"w");
-  if ((NULL == log)) {
-    std::cerr << "Could not create a log file, tried: " << fname_log << std::endl;
-    throw std::runtime_error("FATAL - DaqWriter - logfile");
-  }
 }
 
 void DaqWriter::write_pid_file() {
@@ -183,20 +199,19 @@ void DaqWriter::write_pid_file() {
     std::cerr << "DaqWriter: gethostname failed in write_pid_file" << std::endl;
   }
 
-  FILE *pid_f = ::fopen(fname_pid.c_str(), "w");
+  FILE *pid_f = ::fopen(m_fname_pid.c_str(), "w");
   if (NULL == pid_f) {
-    std::cerr << "Could not create file: " << fname_pid << std::endl;
+    std::cerr << "Could not create file: " << m_fname_pid << std::endl;
     throw std::runtime_error("FATAL - write_pid_file");
   }
   fprintf(pid_f, "group=%s idx=%d hostname=%s pid=%d\n", 
-          config.group.c_str(), config.id, hostname, pid);
+          m_config.group.c_str(), m_config.id, hostname, pid);
   fclose(pid_f);
 }
 
 
 DaqWriter::~DaqWriter() {
-  fclose(log);
-  FILE *finished_f = fopen(fname_finished.c_str(), "w");
+  FILE *finished_f = fopen(m_fname_finished.c_str(), "w");
   if (NULL==finished_f) {
     std::cerr << "could not create finished file\n" << std::endl;
     return;
@@ -207,64 +222,97 @@ DaqWriter::~DaqWriter() {
 
 
 void DaqWriter::run() {
-  config.dump(log);
-  createFile();
-  createAllGroupsDatasetsAndAttributes();
+  std::chrono::time_point<std::chrono::system_clock> start_run, end_run;
+  start_run = std::chrono::system_clock::now();
+  std::time_t start_run_time = std::chrono::system_clock::to_time_t(start_run);
+  m_t0 = Clock::now();
+    
+  std::cout << m_basename << ": start_time: " << std::ctime(&start_run_time) << std::endl;
+  
+  m_config.dump(::stdout);
+  create_file();
+  create_all_groups_datasets_and_attributes();
   start_SWMR_access_to_file();
-  for (long fiducial = 0; fiducial < config.num_shots; ++fiducial) {
+  for (long fiducial = 0; fiducial < m_config.num_shots; ++fiducial) {
     write(fiducial);
-    if (fiducial % config.flush_interval) {
-      flushData();
+    if (fiducial % m_config.flush_interval) {
+      flush_data();
     }
   }
-  if (config.writers_hang != 0) {
-    fprintf(log, "MSG: hanging\n");
-    fflush(log);
+  if (m_config.writers_hang != 0) {
+    printf("MSG: hanging\n");
+    fflush(::stdout);
     while (true) {}
   }
-  check_nonneg( H5Fclose(m_fid), __LINE__);
+  CHECK_NONNEG( H5Fclose(m_fid), "H5Fclose");
 }
 
 
-void DaqWriter::createFile() {
+void DaqWriter::create_file() {
   m_fapl = H5Pcreate(H5P_FILE_ACCESS);
-  check_nonneg( H5Pset_libver_bounds(m_fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST), __LINE__ );
-  m_fid = H5Fcreate(fname_h5.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, m_fapl);
-  check_nonneg(m_fid, __LINE__);
+  CHECK_NONNEG( H5Pset_libver_bounds(m_fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST), "set_libver_bounds" );
+  m_fid = H5Fcreate(m_fname_h5.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, m_fapl);
+  CHECK_NONNEG(m_fid, "creating file");
 };
 
 
-void DaqWriter::createAllGroupsDatasetsAndAttributes() {
-  m_smallGroup = H5Gcreate2(m_fid, "small", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);  
-  m_vlenGroup = H5Gcreate2(m_fid, "vlen", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);  
-  m_detectorGroup = H5Gcreate2(m_fid, "detctor", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);  
-  check_nonneg(m_smallGroup, __LINE__);
-  check_nonneg(m_vlenGroup, __LINE__);
-  check_nonneg(m_detectorGroup, __LINE__);  
+void DaqWriter::create_all_groups_datasets_and_attributes() {
+  m_small_group = H5Gcreate2(m_fid, "small", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);  
+  m_vlen_group = H5Gcreate2(m_fid, "vlen", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);  
+  m_detector_group = H5Gcreate2(m_fid, "detctor", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);  
+  CHECK_NONNEG(m_small_group, "small group");
+  CHECK_NONNEG(m_vlen_group, "vlen group");
+  CHECK_NONNEG(m_detector_group, "detector group");  
 
-  createDsetGroups(m_smallGroup, m_smallDsetGroups, 
-                   config.small_name_first, config.small_name_count);
-  createDsetGroups(m_vlenGroup, m_vlenDsetGroups, 
-                   config.vlen_name_first, config.vlen_name_count);
-  createDsetGroups(m_detectorGroup, m_detectorDsetGroups, 
-                   config.detector_name_first, config.detector_name_count);
+  create_dset_groups(m_small_group, m_small_id_to_group, 
+                   m_config.small_name_first, m_config.small_name_count);
+  create_dset_groups(m_vlen_group, m_vlen_id_to_group, 
+                   m_config.vlen_name_first, m_config.vlen_name_count);
+  create_dset_groups(m_detector_group, m_detector_id_to_group, 
+                   m_config.detector_name_first, m_config.detector_name_count);
 
+  create_fiducials_dsets(m_small_id_to_group, m_small_id_to_fiducials_dset);
+  create_fiducials_dsets(m_vlen_id_to_group, m_vlen_id_to_fiducials_dset);
+  create_fiducials_dsets(m_detector_id_to_group, m_detector_id_to_fiducials_dset);
+
+  create_nano_dsets(m_small_id_to_group, m_small_id_to_nano_dset);
+  create_nano_dsets(m_vlen_id_to_group, m_vlen_id_to_nano_dset);
+  create_nano_dsets(m_detector_id_to_group, m_detector_id_to_nano_dset);
+
+  create_small_data_dsets();
+  create_detector_data_dsets();
+  create_vlen_blob_dsets();
   
 };
 
-void DaqWriter::createDsetGroups(hid_t parent, std::map<int, hid_t> &name2group, int first, int count) {
+void DaqWriter::create_dset_groups(hid_t parent, std::map<int, hid_t> &name_to_group, int first, int count) {
   for (int name = first; name < (first + count); ++name) {
     char strname[128];
     sprintf(strname, "%5.5d", name);
-    hid_t dsetGroup = H5Gcreate2(parent, strname, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    check_nonneg(dsetGroup, __LINE__);
-    name2group[name]=dsetGroup;    
+    hid_t dset_group = H5Gcreate2(parent, strname, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    CHECK_NONNEG(dset_group, strname);
+    name_to_group[name]=dset_group;
   } 
 }
 
+void DaqWriter::create_fiducials_dsets(const std::map<int, hid_t> &id_to_group, std::map<int, hid_t> &id_to_dset) {
+}
+  
+void DaqWriter::create_nano_dsets(const std::map<int, hid_t> &id_to_group, std::map<int, hid_t> &id_to_dset) {
+}
+  
+void DaqWriter::create_small_data_dsets() {
+}
+  
+void DaqWriter::create_detector_data_dsets() {
+}
+  
+void DaqWriter::create_vlen_blob_dsets() {
+}
+    
 
 void DaqWriter::start_SWMR_access_to_file() {
-  check_nonneg(H5Fstart_swmr_write(m_fid), __LINE__);
+  CHECK_NONNEG(H5Fstart_swmr_write(m_fid), "start_swmr");
 };
 
 
@@ -272,15 +320,8 @@ void DaqWriter::write(long fiducial) {
 };
 
 
-void DaqWriter::flushData() {
+void DaqWriter::flush_data() {
 };
-
-void DaqWriter::check_nonneg(herr_t err, int lineno) {
-  if (err < 0) {
-    fprintf(log, "ERROR: check_nonneg line=%d\n", lineno);
-    throw std::runtime_error("FATAL: check_nonneg");
-  } 
-}
 
 int main(int argc, char *argv[]) {
   DaqWriterConfig config;

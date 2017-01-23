@@ -52,7 +52,7 @@ class Jobs(object):
         assert os.path.exists(logdir)
         waiting_for = set()
         for launched in self._launched:
-            basename = launched['group'] + '-r' + ('%4.4d' % launched['idx'])
+            basename = launched['group'] + '-s' + ('%4.4d' % launched['idx'])
             finished_fname = os.path.join(logdir, basename + '.finished')
             if finished_fname in waiting_for:
                 print("WARNING: wait - finished file already in list: %s" % finished_fname)
