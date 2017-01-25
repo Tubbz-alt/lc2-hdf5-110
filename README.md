@@ -25,3 +25,26 @@ You run ana_daq_driver and it
 * bin/ana_reader_master - many of these will run, they will all read the master file to work with the virtual view
 * bin/ana_reader_stream - we can run these too, they will read the daq_writer streams directly
 * all the C++ programs will write their pid's in the pids dir. To clean up, the driver has a --kill command.
+
+## daq_writer
+The schema will be
+```
+/small/00000/data
+/small/00000/fiducials
+/small/00000/nano
+
+/small/00001/data
+...
+/vlen/00000/blob
+/vlen/00000/blobstart
+/vlen/00000/blobcount
+/vlen/00000/fiducials
+/vlen/00000/nano
+...
+/detector/00000/data
+...
+```
+We will write many small groups, and each will have three datases.
+fiducials will just be a counter, and nano will track nanoseconds since program start.
+nano is just for profiling, not merging, fiducials is for merging.  
+
