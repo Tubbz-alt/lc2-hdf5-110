@@ -75,7 +75,6 @@ class Jobs(object):
                     break
             time.sleep(3)
 
-
     def kill_all(self, waiting_for=None):
         def filter_based_on(fnames, waiting_for):
             if None is waiting_for:

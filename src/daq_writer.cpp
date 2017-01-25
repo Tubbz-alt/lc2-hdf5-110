@@ -14,6 +14,7 @@
 #include "ana_daq_util.h"
 
 typedef std::chrono::high_resolution_clock Clock;
+typedef std::map<int, hid_t>::const_iterator CMapIter;
 
 const std::string usage("daq_writer - takes the following arguments:\n "
 "  verbose  integer verbosity level, 0,1, etc\n"
@@ -66,7 +67,7 @@ struct DaqWriterConfig {
   int vlen_name_first;
   int detector_name_first;
 
-  int  small_name_count;
+  int small_name_count;
   int vlen_name_count;
   int detector_name_count;
 
@@ -128,33 +129,39 @@ void DaqWriterConfig::dump(FILE *fout) {
   fflush(fout);
 }
 
+
 class DaqWriter {
   DaqWriterConfig m_config;
   std::string m_basename, m_fname_h5, m_fname_pid, m_fname_finished;
 
   hid_t m_fid, m_fapl, m_small_group, m_vlen_group, m_detector_group;
 
-  std::map<int, hid_t> m_small_id_to_group,
-    m_vlen_id_to_group,
-    m_detector_id_to_group;
+  std::map<int, hid_t> m_small_id_to_number_group,
+    m_vlen_id_to_number_group,
+    m_detector_id_to_number_group;
 
-  std::map<int, hid_t> m_small_id_to_fiducials_dset,
+  std::map<int, DsetInfo> m_small_id_to_fiducials_dset,
     m_vlen_id_to_fiducials_dset,
     m_detector_id_to_fiducials_dset;
 
-  std::map<int, hid_t> m_small_id_to_nano_dset,
+  std::map<int, DsetInfo> m_small_id_to_nano_dset,
     m_vlen_id_to_nano_dset,
     m_detector_id_to_nano_dset;
 
-  std::map<int, hid_t> m_small_id_to_data_dset,
+  std::map<int, DsetInfo> m_small_id_to_data_dset,
     m_vlen_id_to_blob_dset,
     m_detector_id_to_data_dset;
 
-  std::map<int, hid_t> m_vlen_id_to_blob_start_dset,
-    m_vlen_id_to_blob_cound_dset;
+  std::map<int, DsetInfo> m_vlen_id_to_blob_start_dset,
+    m_vlen_id_to_blob_count_dset;
   
   std::chrono::time_point<Clock> m_t0, m_t1;
 
+  int m_next_small, m_next_vlen, m_next_detector;
+  int m_next_vlen_count;
+  std::vector<long> m_vlen_data;
+  std::vector<short> m_detector_data;
+  
 public:
   DaqWriter(const DaqWriterConfig & config_arg);
   ~DaqWriter();
@@ -164,17 +171,24 @@ public:
   void create_all_groups_datasets_and_attributes();
   void start_SWMR_access_to_file();
   void write(long fiducial);
-  void flush_data();
+  void flush_data(long fiducial);
 
 protected:
-  void create_dset_groups(hid_t, std::map<int, hid_t> &, int, int);
-  void create_fiducials_dsets(const std::map<int, hid_t> &, std::map<int, hid_t> &);
-  void create_nano_dsets(const std::map<int, hid_t> &, std::map<int, hid_t> &);
+  void create_number_groups(hid_t, std::map<int, hid_t> &, int, int);
+  void create_fiducials_dsets(const std::map<int, hid_t> &, std::map<int, DsetInfo> &);
+  void create_nano_dsets(const std::map<int, hid_t> &, std::map<int, DsetInfo> &);
 
   void create_small_data_dsets();
   void create_detector_data_dsets();
-  void create_vlen_blob_dsets();
+  void create_vlen_blob_and_index_dsets();
 
+  void write_small(long fiducial);
+  void write_vlen(long fiducial);
+  void write_detector(long fiducial);
+
+  void create_small_dsets_helper(const std::map<int, hid_t> &,
+                                 std::map<int, DsetInfo> &,
+                                 const char *, hid_t, size_t, int);
   void write_pid_file();
 };
 
@@ -188,6 +202,12 @@ DaqWriter::DaqWriter(const DaqWriterConfig & config_arg)
   m_fname_h5 = m_config.rundir + "/hdf5/" + m_basename + ".h5";
   m_fname_pid = m_config.rundir + "/pids/" + m_basename + ".pid";
   m_fname_finished = m_config.rundir + "/logs/" + m_basename + ".finished";
+  m_next_small = m_config.small_shot_first;
+  m_next_vlen = m_config.vlen_shot_first;
+  m_next_detector = m_config.detector_shot_first;
+  m_next_vlen_count = m_config.vlen_min_per_shot;
+  m_vlen_data.resize(m_config.vlen_max_per_shot);
+  m_detector_data.resize(m_config.detector_columns * m_config.detector_rows);
   write_pid_file();
 }
 
@@ -233,10 +253,11 @@ void DaqWriter::run() {
   create_file();
   create_all_groups_datasets_and_attributes();
   start_SWMR_access_to_file();
-  for (long fiducial = 0; fiducial < m_config.num_shots; ++fiducial) {
+  long fiducial = -1;
+  for (fiducial = 0; fiducial < m_config.num_shots; ++fiducial) {
     write(fiducial);
-    if (fiducial % m_config.flush_interval) {
-      flush_data();
+    if ((fiducial > 0) and (0 == (fiducial % m_config.flush_interval))) {
+      flush_data(fiducial);
     }
   }
   if (m_config.writers_hang != 0) {
@@ -245,6 +266,11 @@ void DaqWriter::run() {
     while (true) {}
   }
   CHECK_NONNEG( H5Fclose(m_fid), "H5Fclose");
+  m_t1 = Clock::now();
+
+  auto total_diff = m_t1 - m_t0;
+  auto seconds = std::chrono::duration_cast<std::chrono::seconds>(total_diff);
+  std::cout << "num seconds=" << seconds.count() << " num events=" << fiducial << std::endl;  
 }
 
 
@@ -253,6 +279,10 @@ void DaqWriter::create_file() {
   CHECK_NONNEG( H5Pset_libver_bounds(m_fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST), "set_libver_bounds" );
   m_fid = H5Fcreate(m_fname_h5.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, m_fapl);
   CHECK_NONNEG(m_fid, "creating file");
+  if (m_config.verbose) {
+    printf("created file: %s\n", m_fname_h5.c_str());
+    fflush(::stdout);
+  }
 };
 
 
@@ -264,28 +294,32 @@ void DaqWriter::create_all_groups_datasets_and_attributes() {
   CHECK_NONNEG(m_vlen_group, "vlen group");
   CHECK_NONNEG(m_detector_group, "detector group");  
 
-  create_dset_groups(m_small_group, m_small_id_to_group, 
+  create_number_groups(m_small_group, m_small_id_to_number_group, 
                    m_config.small_name_first, m_config.small_name_count);
-  create_dset_groups(m_vlen_group, m_vlen_id_to_group, 
+  create_number_groups(m_vlen_group, m_vlen_id_to_number_group, 
                    m_config.vlen_name_first, m_config.vlen_name_count);
-  create_dset_groups(m_detector_group, m_detector_id_to_group, 
+  create_number_groups(m_detector_group, m_detector_id_to_number_group, 
                    m_config.detector_name_first, m_config.detector_name_count);
 
-  create_fiducials_dsets(m_small_id_to_group, m_small_id_to_fiducials_dset);
-  create_fiducials_dsets(m_vlen_id_to_group, m_vlen_id_to_fiducials_dset);
-  create_fiducials_dsets(m_detector_id_to_group, m_detector_id_to_fiducials_dset);
+  create_fiducials_dsets(m_small_id_to_number_group, m_small_id_to_fiducials_dset);
+  create_fiducials_dsets(m_vlen_id_to_number_group, m_vlen_id_to_fiducials_dset);
+  create_fiducials_dsets(m_detector_id_to_number_group, m_detector_id_to_fiducials_dset);
 
-  create_nano_dsets(m_small_id_to_group, m_small_id_to_nano_dset);
-  create_nano_dsets(m_vlen_id_to_group, m_vlen_id_to_nano_dset);
-  create_nano_dsets(m_detector_id_to_group, m_detector_id_to_nano_dset);
+  create_nano_dsets(m_small_id_to_number_group, m_small_id_to_nano_dset);
+  create_nano_dsets(m_vlen_id_to_number_group, m_vlen_id_to_nano_dset);
+  create_nano_dsets(m_detector_id_to_number_group, m_detector_id_to_nano_dset);
 
   create_small_data_dsets();
   create_detector_data_dsets();
-  create_vlen_blob_dsets();
+  create_vlen_blob_and_index_dsets();
   
+  if (m_config.verbose) {
+    printf("created all groups and datasets: %s\n", m_fname_h5.c_str());
+    fflush(::stdout);
+  }
 };
 
-void DaqWriter::create_dset_groups(hid_t parent, std::map<int, hid_t> &name_to_group, int first, int count) {
+void DaqWriter::create_number_groups(hid_t parent, std::map<int, hid_t> &name_to_group, int first, int count) {
   for (int name = first; name < (first + count); ++name) {
     char strname[128];
     sprintf(strname, "%5.5d", name);
@@ -295,32 +329,171 @@ void DaqWriter::create_dset_groups(hid_t parent, std::map<int, hid_t> &name_to_g
   } 
 }
 
-void DaqWriter::create_fiducials_dsets(const std::map<int, hid_t> &id_to_group, std::map<int, hid_t> &id_to_dset) {
+void DaqWriter::create_small_dsets_helper(const std::map<int, hid_t> &id_to_parent,
+                                          std::map<int, DsetInfo> &id_to_dset,
+                                          const char *dset_name,
+                                          hid_t h5_type,
+                                          size_t type_size_bytes,
+                                          int chunksize)
+{
+  for (CMapIter iter = id_to_parent.begin(); iter != id_to_parent.end(); ++iter) {
+    int group_id = iter->first;
+    hid_t h5_group = iter->second;
+    if (id_to_dset.find(group_id) != id_to_dset.end()) {
+      throw std::runtime_error("create_small_dsets_helper, id already in map");
+    }
+    id_to_dset[group_id] = ::create_1d_dataset(h5_group, dset_name, h5_type, chunksize, type_size_bytes);
+  }
+}
+
+void DaqWriter::create_fiducials_dsets(const std::map<int, hid_t> &id_to_number_group, std::map<int, DsetInfo> &id_to_dset) {
+  create_small_dsets_helper(id_to_number_group, id_to_dset,
+                            "fiducials", H5T_NATIVE_LONG, 8, m_config.small_chunksize);
 }
   
-void DaqWriter::create_nano_dsets(const std::map<int, hid_t> &id_to_group, std::map<int, hid_t> &id_to_dset) {
+void DaqWriter::create_nano_dsets(const std::map<int, hid_t> &id_to_number_group, std::map<int, DsetInfo> &id_to_dset) {
+  create_small_dsets_helper(id_to_number_group, id_to_dset,
+                            "nano", H5T_NATIVE_LONG, 8, m_config.small_chunksize);
 }
   
 void DaqWriter::create_small_data_dsets() {
+  create_small_dsets_helper(m_small_id_to_number_group, m_small_id_to_data_dset,
+                            "data", H5T_NATIVE_LONG, 8, m_config.small_chunksize);
 }
   
 void DaqWriter::create_detector_data_dsets() {
+  size_t size_bytes = 2;
+  for (CMapIter iter = m_detector_id_to_number_group.begin(); iter != m_detector_id_to_number_group.end(); ++iter) {
+    int group_id = iter->first;
+    hid_t h5_group = iter->second;
+    if (m_detector_id_to_data_dset.find(group_id) != m_detector_id_to_data_dset.end()) {
+      throw std::runtime_error("create_detector_data_dsets, id already in map");
+    }
+
+    m_detector_id_to_data_dset[group_id] = ::create_3d_dataset(h5_group, "data", H5T_NATIVE_SHORT,
+                                                               m_config.detector_rows,
+                                                               m_config.detector_columns,
+                                                               m_config.detector_chunksize,
+                                                               size_bytes);
+  }
 }
   
-void DaqWriter::create_vlen_blob_dsets() {
+void DaqWriter::create_vlen_blob_and_index_dsets() {
+  create_small_dsets_helper(m_vlen_id_to_number_group, m_vlen_id_to_blob_dset,
+                            "blob", H5T_NATIVE_LONG, 8, m_config.small_chunksize);
+  create_small_dsets_helper(m_vlen_id_to_number_group, m_vlen_id_to_blob_start_dset,
+                            "blobstart", H5T_NATIVE_LONG, 8, m_config.small_chunksize);
+  create_small_dsets_helper(m_vlen_id_to_number_group, m_vlen_id_to_blob_count_dset,
+                            "blobcount", H5T_NATIVE_LONG, 8, m_config.small_chunksize);
 }
     
 
 void DaqWriter::start_SWMR_access_to_file() {
   CHECK_NONNEG(H5Fstart_swmr_write(m_fid), "start_swmr");
+  if (m_config.verbose) {
+    printf("started SWMR access\n");
+    fflush(::stdout);
+  }
 };
 
 
 void DaqWriter::write(long fiducial) {
+  if (m_config.verbose >= 2) {
+    printf("entering write(%ld)\n", fiducial);
+    fflush(::stdout);
+  }
+  write_small(fiducial);
+  write_vlen(fiducial);
+  write_detector(fiducial);
+}
+
+
+void DaqWriter::write_small(long fiducial) {
+  if (fiducial == m_next_small) {
+    m_next_small += std::max(1, m_config.small_shot_stride);
+    auto small_time = Clock::now();
+    auto diff = small_time - m_t0;
+    auto nano = std::chrono::duration_cast<std::chrono::nanoseconds>(diff);
+    for (int small_id = m_config.small_name_first;
+         small_id < m_config.small_name_first + m_config.small_name_count;
+         ++small_id)
+      {
+        DsetInfo & fid_dset = m_small_id_to_fiducials_dset[small_id];
+        DsetInfo & nano_dset = m_small_id_to_nano_dset[small_id];
+        DsetInfo & data_dset = m_small_id_to_data_dset[small_id];
+
+        ::append_to_1d_dset(fid_dset, fiducial);
+        ::append_to_1d_dset(nano_dset, nano.count());
+        ::append_to_1d_dset(data_dset, fiducial);        
+      }
+  }
+}
+
+
+void DaqWriter::write_vlen(long fiducial) {
+  if (fiducial == m_next_vlen) {
+    m_next_vlen += std::max(1, m_config.vlen_shot_stride);
+    auto vlen_time = Clock::now();
+    auto diff = vlen_time - m_t0;
+    auto nano = std::chrono::duration_cast<std::chrono::nanoseconds>(diff);
+
+    m_next_vlen_count += 1;
+    m_next_vlen_count %= m_config.vlen_max_per_shot;
+    m_next_vlen_count = std::max(m_config.vlen_min_per_shot, m_next_vlen_count);
+    for (size_t idx = 0; idx < unsigned(m_next_vlen_count); ++idx) m_vlen_data[idx]=fiducial;
+      
+    for (int vlen_id = m_config.vlen_name_first;
+         vlen_id < m_config.vlen_name_first + m_config.vlen_name_count;
+         ++vlen_id)
+      {
+        DsetInfo & fid_dset = m_vlen_id_to_fiducials_dset[vlen_id];
+        DsetInfo & nano_dset = m_vlen_id_to_nano_dset[vlen_id];
+        DsetInfo & blobdata_dset = m_vlen_id_to_blob_dset[vlen_id];
+        DsetInfo & blobstart_dset = m_vlen_id_to_blob_start_dset[vlen_id];
+        DsetInfo & blobcount_dset = m_vlen_id_to_blob_count_dset[vlen_id];
+
+        ::append_to_1d_dset(fid_dset, fiducial);
+        ::append_to_1d_dset(nano_dset, nano.count());
+        long start_idx = ::append_many_to_1d_dset(blobdata_dset, m_next_vlen_count, &m_vlen_data[0]);
+        ::append_to_1d_dset(blobstart_dset, start_idx);
+        ::append_to_1d_dset(blobcount_dset, m_next_vlen_count);
+      }
+  }
+}
+
+
+void DaqWriter::write_detector(long fiducial) {
+  if (fiducial == m_next_detector) {
+    m_next_detector += std::max(1, m_config.detector_shot_stride);
+    auto detector_time = Clock::now();
+    auto diff = detector_time - m_t0;
+    auto nano = std::chrono::duration_cast<std::chrono::nanoseconds>(diff);
+    for (std::vector<short>::iterator idx = m_detector_data.begin();
+         idx != m_detector_data.end(); ++idx) {
+      *idx = short(fiducial);
+    }
+    
+    for (int detector_id = m_config.detector_name_first;
+         detector_id < m_config.detector_name_first + m_config.detector_name_count;
+         ++detector_id)
+      {
+        DsetInfo & fid_dset = m_detector_id_to_fiducials_dset[detector_id];
+        DsetInfo & nano_dset = m_detector_id_to_nano_dset[detector_id];
+        DsetInfo & data_dset = m_detector_id_to_data_dset[detector_id];
+
+        ::append_to_1d_dset(fid_dset, fiducial);
+        ::append_to_1d_dset(nano_dset, nano.count());
+        ::append_to_3d_dset(data_dset, m_config.detector_rows, m_config.detector_columns, &m_detector_data[0]);
+      }
+  }
 };
 
 
-void DaqWriter::flush_data() {
+void DaqWriter::flush_data(long fiducial) {
+  if (m_config.verbose) {
+    printf("flush_data: fiducial=%ld\n", fiducial);
+    fflush(::stdout);
+  }
 };
 
 int main(int argc, char *argv[]) {
@@ -359,8 +532,15 @@ int main(int argc, char *argv[]) {
   config.writers_hang = atoi(argv[idx++]);
 
   std::cout << "daq_writer: " << foo() << std::endl;
-  DaqWriter daqWriter(config);
-  daqWriter.run();
 
+  H5open();
+  try {
+    DaqWriter daqWriter(config);
+    daqWriter.run();
+  } catch (...) {
+    H5close();
+    throw;
+  }
+  H5close();
   return 0;
 }

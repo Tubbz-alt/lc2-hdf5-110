@@ -41,6 +41,8 @@ def getParser():
                         help='verbosity')
     parser.add_argument('--flush_interval', type=int,
                         help='how many events between flushes')
+    parser.add_argument('--num_samples', type=int,
+                        help='limit number of events')
     parser.add_argument('--time', type=int, 
                         help='number of seconds to run for, kill after that.')
     parser.add_argument('--kill', action='store_true',
@@ -341,7 +343,7 @@ def run(argv):
     
     config = yaml.load(open(args.config,'r'))
     check_config(config)
-    for ky in ['force','rootdir','rundir','verbose','flush_interval','time','writers_hang']:
+    for ky in ['force','rootdir','rundir','verbose','flush_interval','time','writers_hang', 'num_samples']:
         val = getattr(args,ky)
         if val in [None, False]: continue
         print("replacing config[%s] with %s (from command line)" % (ky,val))
@@ -370,11 +372,12 @@ def run(argv):
     jobs.launch('daq_writers', daq_writer_commands, daq_writer_hosts)
     time.sleep(1)
     jobs.wait()
+
     
-    pprint(config)
-    pprint(daq_writers)
-    pprint(daq_writer_commands)
-    pprint(daq_writer_hosts)
+#    pprint(config)
+#    pprint(daq_writers)
+#    pprint(daq_writer_commands)
+#    pprint(daq_writer_hosts)
     
 if __name__ == '__main__':
     run(sys.argv)
