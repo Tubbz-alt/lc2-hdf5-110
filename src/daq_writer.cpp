@@ -189,6 +189,9 @@ protected:
   void create_small_dsets_helper(const std::map<int, hid_t> &,
                                  std::map<int, DsetInfo> &,
                                  const char *, hid_t, size_t, int);
+
+  void flush_helper(const std::map<int, DsetInfo> &);
+
   void write_pid_file();
 };
 
@@ -489,11 +492,32 @@ void DaqWriter::write_detector(long fiducial) {
 };
 
 
+void DaqWriter::flush_helper(const std::map<int, DsetInfo> &id_to_dset) {
+  typedef std::map<int, DsetInfo>::const_iterator Iter;
+  for (Iter iter = id_to_dset.begin(); iter != id_to_dset.end(); ++iter) {
+    const DsetInfo &dsetInfo = iter->second;
+    CHECK_NONNEG( H5Dflush(dsetInfo.dset_id), "flushing dataset");
+  }
+}
+
 void DaqWriter::flush_data(long fiducial) {
   if (m_config.verbose) {
     printf("flush_data: fiducial=%ld\n", fiducial);
     fflush(::stdout);
   }
+  flush_helper(m_small_id_to_fiducials_dset);
+  flush_helper(m_small_id_to_nano_dset);
+  flush_helper(m_small_id_to_data_dset);
+
+  flush_helper(m_vlen_id_to_fiducials_dset);
+  flush_helper(m_vlen_id_to_nano_dset);
+  flush_helper(m_vlen_id_to_blob_dset);
+  flush_helper(m_vlen_id_to_blob_count_dset);
+  flush_helper(m_vlen_id_to_blob_start_dset);
+
+  flush_helper(m_detector_id_to_fiducials_dset);
+  flush_helper(m_detector_id_to_nano_dset);
+  flush_helper(m_detector_id_to_data_dset);
 };
 
 int main(int argc, char *argv[]) {
