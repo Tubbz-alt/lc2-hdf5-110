@@ -58,20 +58,21 @@ DsetInfo create_3d_dataset(hid_t parent, const char *dset, hid_t h5_type,
   CHECK_NONNEG(plist_id, "H5Pcreate");  
   CHECK_NONNEG(H5Pset_chunk(plist_id, rank, chunk_dims), "set_chunk");
   
-  hid_t access_id = H5Pcreate(H5P_DATASET_ACCESS);
-  CHECK_NONNEG(access_id, "H5Pcreate");
+  //  hid_t access_id = H5Pcreate(H5P_DATASET_ACCESS);
+  //  CHECK_NONNEG(access_id, "H5Pcreate");
   
-  size_t rdcc_nslots = 101;
-  size_t rdcc_nbytes = chunk_size * type_size_bytes * 3;
-  double rdcc_w0 = 0.75;
-  CHECK_NONNEG(H5Pset_chunk_cache(access_id, rdcc_nslots, rdcc_nbytes, rdcc_w0), "H5Pset_chunk_cache");
+  //  size_t rdcc_nslots = 101;
+  //  size_t rdcc_nbytes = chunk_size * type_size_bytes * 3;
+  //  double rdcc_w0 = 0.75;
+  //  CHECK_NONNEG(H5Pset_chunk_cache(access_id, rdcc_nslots, rdcc_nbytes, rdcc_w0), "H5Pset_chunk_cache");
 
-  hid_t h5_dset = H5Dcreate2(parent, dset, h5_type, space_id, H5P_DEFAULT, plist_id, access_id);
+  //  hid_t h5_dset = H5Dcreate2(parent, dset, h5_type, space_id, H5P_DEFAULT, plist_id, access_id);
+  hid_t h5_dset = H5Dcreate2(parent, dset, h5_type, space_id, H5P_DEFAULT, plist_id, H5P_DEFAULT);
   CHECK_NONNEG(h5_dset, dset);
 
   CHECK_NONNEG(H5Sclose(space_id), "H5Sclose");
   CHECK_NONNEG(H5Pclose(plist_id), "H5Pclose");
-  CHECK_NONNEG(H5Pclose(access_id), "H5Aclose");
+  //  CHECK_NONNEG(H5Pclose(access_id), "H5Aclose");
   
   return DsetInfo(h5_dset, 0);
 }
@@ -120,25 +121,29 @@ void append_to_1d_dset(DsetInfo &dset_info, long value) {
 }
 
 void append_to_3d_dset(DsetInfo &dset_info, int nrows, int ncols, short *data) {
-  hsize_t write_start[3] = {dset_info.extent, 0, 0};
+  hsize_t current = dset_info.extent;
   dset_info.extent += 1;
   hsize_t new_size[3] = {dset_info.extent, hsize_t(nrows), hsize_t(ncols)};
-  hsize_t count[3] = {1, hsize_t(nrows), hsize_t(ncols)};
   CHECK_NONNEG(H5Dset_extent(dset_info.dset_id, new_size), "increasing extent for 3d");
   hid_t dspace_id = H5Dget_space(dset_info.dset_id);
   CHECK_NONNEG(dspace_id, "H5Dget_space");
-  CHECK_NONNEG( H5Sselect_hyperslab(dspace_id, H5S_SELECT_SET,
-                                    write_start, NULL, count, NULL),
+
+  hsize_t offset[3] = {current, 0, 0};
+  hsize_t count[3] = {1, hsize_t(nrows), hsize_t(ncols)};
+  CHECK_NONNEG( H5Sselect_hyperslab(dspace_id,
+                                    H5S_SELECT_SET,
+                                    offset,
+                                    NULL,
+                                    count,
+                                    NULL),
                 "H5Sselect_hyperslab - append 1d");  
-  hid_t memory_dspace_id = H5Screate_simple(3, count, count);
-  printf("det H5Dwrite\n"); fflush(::stdout);  
+  hid_t memory_dspace_id = H5Screate_simple(3, count, NULL);
   CHECK_NONNEG( H5Dwrite(dset_info.dset_id,
-                         H5T_NATIVE_LONG,
+                         H5T_NATIVE_SHORT,
                          memory_dspace_id,
                          dspace_id,
                          H5P_DEFAULT,
                          data), "H5Dwrite 3d");
-  printf("det H5Dwrite --finished\n"); fflush(::stdout);
   CHECK_NONNEG( H5Sclose(dspace_id), "3d close");    
   CHECK_NONNEG( H5Sclose(memory_dspace_id), "3d close");    
 }

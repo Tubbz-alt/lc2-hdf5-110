@@ -472,7 +472,7 @@ void DaqWriter::write_detector(long fiducial) {
          idx != m_detector_data.end(); ++idx) {
       *idx = short(fiducial);
     }
-    
+      
     for (int detector_id = m_config.detector_name_first;
          detector_id < m_config.detector_name_first + m_config.detector_name_count;
          ++detector_id)
