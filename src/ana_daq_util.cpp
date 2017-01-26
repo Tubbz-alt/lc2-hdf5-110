@@ -153,3 +153,18 @@ int foo() {
 }
 
 
+void linedump_vector(FILE *fout, const char *hdr, const std::vector<int> &data) {
+  fprintf(fout, "%s:", hdr);
+  for (std::vector<int>::const_iterator iter = data.begin();
+       iter != data.end(); ++iter) {
+    fprintf(fout, " %d", *iter);    
+  }
+  fprintf(fout, "\n");
+}
+
+int read_args(std::vector<int> &to_fill, int num, char *argv[], int start_at) {
+  for (int idx = start_at; idx < start_at + num; ++idx) {
+    to_fill.push_back(atoi(argv[idx]));
+  }
+  return start_at + num;
+}

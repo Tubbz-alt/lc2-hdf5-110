@@ -1,6 +1,8 @@
 #ifndef LC2DAQ_HH
 #define LC2DAQ_HH
 
+#include <cstdio>
+#include <vector>
 #include <chrono>
 
 #define CHECK_NONNEG(x , msg) check_nonneg(x, msg, __LINE__, __FILE__)
@@ -27,4 +29,6 @@ void append_to_3d_dset(DsetInfo &, int, int, short *);
 
 int foo();
 
+void linedump_vector(FILE *fout, const char *hdr, const std::vector<int> &data);
+int read_args(std::vector<int> &to_fill, int num, char *argv[], int start_at);
 #endif // LC2DAQ_HH

@@ -14,13 +14,18 @@ bin/ana_daq_driver:
 	chmod a+x bin/ana_daq_driver
 
 #### LIB
-lib/libana_daq_util.so: build/ana_daq_util.o
-	$(CC) -shared $(LDFLAGS) $< -o $@
+lib/libana_daq_util.so: build/ana_daq_util.o build/daq_base.o
+	$(CC) -shared $(LDFLAGS) build/ana_daq_util.o build/daq_base.o -o $@
 
 build/ana_daq_util.o: src/ana_daq_util.cpp include/ana_daq_util.h
 	$(CC) $(CFLAGS) $< -o $@
 
+build/daq_base.o: src/daq_base.cpp include/daq_base.h
+	$(CC) $(CFLAGS) $< -o $@
+
 include/ana_daq_util.h:
+
+include/daq_base.h:
 
 #### DAQ STREAM WRITER
 bin/daq_writer: build/daq_writer.o lib/libana_daq_util.so

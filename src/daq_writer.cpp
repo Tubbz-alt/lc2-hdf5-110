@@ -11,6 +11,7 @@
 #include "hdf5.h"
 
 #include "ana_daq_util.h"
+#include "daq_base.h"
 
 const std::string usage("daq_writer - takes the following arguments:\n "
 "  verbose  integer verbosity level, 0,1, etc\n"
@@ -20,9 +21,9 @@ const std::string usage("daq_writer - takes the following arguments:\n "
 
 "  num_shots     int, how many shots will the DAQ write in this run\n"
 
-"  small_first     int, first small dataset to write\n"
-"  vlen_first      int, first vlen dataset to write\n"
-"  detector_first  int, first detector dataset to write\n"
+"  small_name_first     int, first small dataset to write\n"
+"  vlen_name_first      int, first vlen dataset to write\n"
+"  detector_name_first  int, first detector dataset to write\n"
 
 "  small_count     int, count of small datasets to write\n"
 "  vlen_count      int, count of vlen datasets to write\n"
@@ -51,17 +52,10 @@ const std::string usage("daq_writer - takes the following arguments:\n "
 "  writers_hang   have writers hang when done, for debugging process control\n"
 "\n");
 
-struct DaqWriterConfig {
-  int verbose;
-  std::string rundir;
-  std::string group;
-  int id;
-
-  long num_shots;
-
-  int small_first;
-  int vlen_first;
-  int detector_first;
+struct DaqWriterConfig : DaqBaseConfig {
+  int small_name_first;
+  int vlen_name_first;
+  int detector_name_first;
 
   int small_count;
   int vlen_count;
@@ -75,23 +69,13 @@ struct DaqWriterConfig {
   int vlen_shot_stride;
   int detector_shot_stride;
 
-  int small_chunksize;
-  int vlen_chunksize;
-  int detector_chunksize;
-
   int vlen_min_per_shot;
   int vlen_max_per_shot;
-
-  int detector_rows;
-  int detector_columns;
-
-  int flush_interval;
-
-  int writers_hang;
 
   static const int num_args = 26;
   
   void dump(FILE *fout);
+  bool parse_command_line(int argc, char *argv[], const std::string &usage);
 };
 
 void DaqWriterConfig::dump(FILE *fout) {
@@ -101,9 +85,9 @@ void DaqWriterConfig::dump(FILE *fout) {
   fprintf(fout, "    group=%s\n", group.c_str());
   fprintf(fout, "    id=%d\n", id);
   fprintf(fout, "    num_shots=%ld\n", num_shots);
-  fprintf(fout, "    small_first=%d\n", small_first);
-  fprintf(fout, "    vlen_first=%d\n", vlen_first);
-  fprintf(fout, "    detector_first=%d\n", detector_first);
+  fprintf(fout, "    small_name_first=%d\n", small_name_first);
+  fprintf(fout, "    vlen_name_first=%d\n", vlen_name_first);
+  fprintf(fout, "    detector_name_first=%d\n", detector_name_first);
   fprintf(fout, "    small_count=%d\n", small_count);
   fprintf(fout, "    vlen_count=%d\n", vlen_count);
   fprintf(fout, "    detector_count=%d\n", detector_count);
@@ -121,14 +105,48 @@ void DaqWriterConfig::dump(FILE *fout) {
   fprintf(fout, "    detector_rows=%d\n", detector_rows);
   fprintf(fout, "    detector_columns=%d\n", detector_columns);
   fprintf(fout, "    flush_interval=%d\n", flush_interval);
-  fprintf(fout, "    writers_hang=%d\n", writers_hang);
+  fprintf(fout, "    hang=%d\n", hang);
   fflush(fout);
 }
 
+bool DaqWriterConfig::parse_command_line(int argc, char *argv[], const std::string &usage) {
+  if (argc-1 != DaqWriterConfig::num_args) {
+    std::cerr << "ERROR: need " << DaqWriterConfig::num_args << " arguments, but received " << argc-1 << std::endl;
+    std::cerr << usage << std::endl;
+    return false;
+  }
+  int idx = 1;
+  verbose = atoi(argv[idx++]);
+  rundir = std::string(argv[idx++]);
+  group = std::string(argv[idx++]);
+  id = atoi(argv[idx++]);
+  num_shots = atol(argv[idx++]);
+  small_name_first = atoi(argv[idx++]);
+  vlen_name_first = atoi(argv[idx++]);
+  detector_name_first = atoi(argv[idx++]);
+  small_count = atoi(argv[idx++]);
+  vlen_count = atoi(argv[idx++]);
+  detector_count = atoi(argv[idx++]);
+  small_shot_first = atoi(argv[idx++]);
+  vlen_shot_first = atoi(argv[idx++]);
+  detector_shot_first = atoi(argv[idx++]);
+  small_shot_stride = atoi(argv[idx++]);
+  vlen_shot_stride = atoi(argv[idx++]);
+  detector_shot_stride = atoi(argv[idx++]);
+  small_chunksize = atoi(argv[idx++]);
+  vlen_chunksize = atoi(argv[idx++]);
+  detector_chunksize = atoi(argv[idx++]);
+  vlen_min_per_shot = atoi(argv[idx++]);
+  vlen_max_per_shot = atoi(argv[idx++]);
+  detector_rows = atoi(argv[idx++]);
+  detector_columns = atoi(argv[idx++]);
+  flush_interval = atoi(argv[idx++]);
+  hang = atoi(argv[idx++]);
+  return true;
+}
 
-class DaqWriter {
+class DaqWriter : public DaqBase {
   DaqWriterConfig m_config;
-  std::string m_basename, m_fname_h5, m_fname_pid, m_fname_finished;
 
   hid_t m_fid, m_fapl, m_small_group, m_vlen_group, m_detector_group;
 
@@ -188,19 +206,12 @@ protected:
 
   void flush_helper(const std::map<int, DsetInfo> &);
 
-  void write_pid_file();
 };
 
 
-DaqWriter::DaqWriter(const DaqWriterConfig & config_arg)
-  : m_config(config_arg)
+DaqWriter::DaqWriter(const DaqWriterConfig & config)
+  : DaqBase(config), m_config(config)
 {
-  static char idstr[128];
-  sprintf(idstr, "%4.4d", m_config.id);
-  m_basename = m_config.group + "-s" + idstr;
-  m_fname_h5 = m_config.rundir + "/hdf5/" + m_basename + ".h5";
-  m_fname_pid = m_config.rundir + "/pids/" + m_basename + ".pid";
-  m_fname_finished = m_config.rundir + "/logs/" + m_basename + ".finished";
   m_next_small = m_config.small_shot_first;
   m_next_vlen = m_config.vlen_shot_first;
   m_next_detector = m_config.detector_shot_first;
@@ -210,34 +221,8 @@ DaqWriter::DaqWriter(const DaqWriterConfig & config_arg)
   write_pid_file();
 }
 
-void DaqWriter::write_pid_file() {
-  pid_t pid = ::getpid();
-  char hostname[256];
-  if (0 != gethostname(hostname, 256)) {
-    sprintf(hostname, "--unknown--");
-    std::cerr << "DaqWriter: gethostname failed in write_pid_file" << std::endl;
-  }
 
-  FILE *pid_f = ::fopen(m_fname_pid.c_str(), "w");
-  if (NULL == pid_f) {
-    std::cerr << "Could not create file: " << m_fname_pid << std::endl;
-    throw std::runtime_error("FATAL - write_pid_file");
-  }
-  fprintf(pid_f, "group=%s idx=%d hostname=%s pid=%d\n", 
-          m_config.group.c_str(), m_config.id, hostname, pid);
-  fclose(pid_f);
-}
-
-
-DaqWriter::~DaqWriter() {
-  FILE *finished_f = fopen(m_fname_finished.c_str(), "w");
-  if (NULL==finished_f) {
-    std::cerr << "could not create finished file\n" << std::endl;
-    return;
-  }
-  fprintf(finished_f,"done.\n");
-  fclose(finished_f);
-}
+DaqWriter::~DaqWriter() {}
 
 
 void DaqWriter::run() {
@@ -259,7 +244,7 @@ void DaqWriter::run() {
       flush_data(fiducial);
     }
   }
-  if (m_config.writers_hang != 0) {
+  if (m_config.hang != 0) {
     printf("MSG: hanging\n");
     fflush(::stdout);
     while (true) {}
@@ -294,11 +279,11 @@ void DaqWriter::create_all_groups_datasets_and_attributes() {
   CHECK_NONNEG(m_detector_group, "detector group");  
 
   create_number_groups(m_small_group, m_small_id_to_number_group, 
-                   m_config.small_first, m_config.small_count);
+                   m_config.small_name_first, m_config.small_count);
   create_number_groups(m_vlen_group, m_vlen_id_to_number_group, 
-                   m_config.vlen_first, m_config.vlen_count);
+                   m_config.vlen_name_first, m_config.vlen_count);
   create_number_groups(m_detector_group, m_detector_id_to_number_group, 
-                   m_config.detector_first, m_config.detector_count);
+                   m_config.detector_name_first, m_config.detector_count);
 
   create_fiducials_dsets(m_small_id_to_number_group, m_small_id_to_fiducials_dset);
   create_fiducials_dsets(m_vlen_id_to_number_group, m_vlen_id_to_fiducials_dset);
@@ -413,8 +398,8 @@ void DaqWriter::write_small(long fiducial) {
     auto small_time = Clock::now();
     auto diff = small_time - m_t0;
     auto nano = std::chrono::duration_cast<std::chrono::nanoseconds>(diff);
-    for (int small_id = m_config.small_first;
-         small_id < m_config.small_first + m_config.small_count;
+    for (int small_id = m_config.small_name_first;
+         small_id < m_config.small_name_first + m_config.small_count;
          ++small_id)
       {
         DsetInfo & fid_dset = m_small_id_to_fiducials_dset[small_id];
@@ -441,8 +426,8 @@ void DaqWriter::write_vlen(long fiducial) {
     m_next_vlen_count = std::max(m_config.vlen_min_per_shot, m_next_vlen_count);
     for (size_t idx = 0; idx < unsigned(m_next_vlen_count); ++idx) m_vlen_data[idx]=fiducial;
       
-    for (int vlen_id = m_config.vlen_first;
-         vlen_id < m_config.vlen_first + m_config.vlen_count;
+    for (int vlen_id = m_config.vlen_name_first;
+         vlen_id < m_config.vlen_name_first + m_config.vlen_count;
          ++vlen_id)
       {
         DsetInfo & fid_dset = m_vlen_id_to_fiducials_dset[vlen_id];
@@ -472,8 +457,8 @@ void DaqWriter::write_detector(long fiducial) {
       *idx = short(fiducial);
     }
       
-    for (int detector_id = m_config.detector_first;
-         detector_id < m_config.detector_first + m_config.detector_count;
+    for (int detector_id = m_config.detector_name_first;
+         detector_id < m_config.detector_name_first + m_config.detector_count;
          ++detector_id)
       {
         DsetInfo & fid_dset = m_detector_id_to_fiducials_dset[detector_id];
@@ -518,41 +503,10 @@ void DaqWriter::flush_data(long fiducial) {
 
 int main(int argc, char *argv[]) {
   DaqWriterConfig config;
-  if (argc-1 != DaqWriterConfig::num_args) {
-    std::cerr << "ERROR: need " << DaqWriterConfig::num_args << " arguments, but received " << argc-1 << std::endl;
-    std::cerr << usage << std::endl;
+  if (not config.parse_command_line(argc, argv, usage)) {
     return -1;
   }
-  int idx = 1;
-  config.verbose = atoi(argv[idx++]);
-  config.rundir = std::string(argv[idx++]);
-  config.group = std::string(argv[idx++]);
-  config.id = atoi(argv[idx++]);
-  config.num_shots = atol(argv[idx++]);
-  config.small_first = atoi(argv[idx++]);
-  config.vlen_first = atoi(argv[idx++]);
-  config.detector_first = atoi(argv[idx++]);
-  config.small_count = atoi(argv[idx++]);
-  config.vlen_count = atoi(argv[idx++]);
-  config.detector_count = atoi(argv[idx++]);
-  config.small_shot_first = atoi(argv[idx++]);
-  config.vlen_shot_first = atoi(argv[idx++]);
-  config.detector_shot_first = atoi(argv[idx++]);
-  config.small_shot_stride = atoi(argv[idx++]);
-  config.vlen_shot_stride = atoi(argv[idx++]);
-  config.detector_shot_stride = atoi(argv[idx++]);
-  config.small_chunksize = atoi(argv[idx++]);
-  config.vlen_chunksize = atoi(argv[idx++]);
-  config.detector_chunksize = atoi(argv[idx++]);
-  config.vlen_min_per_shot = atoi(argv[idx++]);
-  config.vlen_max_per_shot = atoi(argv[idx++]);
-  config.detector_rows = atoi(argv[idx++]);
-  config.detector_columns = atoi(argv[idx++]);
-  config.flush_interval = atoi(argv[idx++]);
-  config.writers_hang = atoi(argv[idx++]);
-
-  std::cout << "daq_writer: " << foo() << std::endl;
-
+  
   H5open();
   try {
     DaqWriter daqWriter(config);
