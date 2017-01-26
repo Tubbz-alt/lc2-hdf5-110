@@ -43,8 +43,6 @@ def getParser():
                         help='how many events between flushes')
     parser.add_argument('--num_samples', type=int,
                         help='limit number of events')
-    parser.add_argument('--time', type=int, 
-                        help='number of seconds to run for, kill after that.')
     parser.add_argument('--kill', action='store_true',
                         help='kill any jobs in progress for the given prefix/config')
     parser.add_argument('--writer', action='store_true',
@@ -240,7 +238,6 @@ def check_structure(config):
                  'num_samples':'value',
                  'verbose':'value',
                  'flush_interval':'value',
-                 'time':'value',
                  'writers_hang':'value',
                  'lfs':{'do_stripe':'value',
                         'stripe_size_mb':'value',
@@ -343,7 +340,7 @@ def run(argv):
     
     config = yaml.load(open(args.config,'r'))
     check_config(config)
-    for ky in ['force','rootdir','rundir','verbose','flush_interval','time','writers_hang', 'num_samples']:
+    for ky in ['force','rootdir','rundir','verbose','flush_interval', 'writers_hang', 'num_samples']:
         val = getattr(args,ky)
         if val in [None, False]: continue
         print("replacing config[%s] with %s (from command line)" % (ky,val))

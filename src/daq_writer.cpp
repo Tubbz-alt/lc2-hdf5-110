@@ -7,14 +7,10 @@
 #include <unistd.h>
 #include <vector>
 #include <map>
-#include <chrono>
 
 #include "hdf5.h"
 
 #include "ana_daq_util.h"
-
-typedef std::chrono::high_resolution_clock Clock;
-typedef std::map<int, hid_t>::const_iterator CMapIter;
 
 const std::string usage("daq_writer - takes the following arguments:\n "
 "  verbose  integer verbosity level, 0,1, etc\n"
@@ -24,13 +20,13 @@ const std::string usage("daq_writer - takes the following arguments:\n "
 
 "  num_shots     int, how many shots will the DAQ write in this run\n"
 
-"  small_name_first     int, first small dataset to write\n"
-"  vlen_name_first      int, first vlen dataset to write\n"
-"  detector_name_first  int, first detector dataset to write\n"
+"  small_first     int, first small dataset to write\n"
+"  vlen_first      int, first vlen dataset to write\n"
+"  detector_first  int, first detector dataset to write\n"
 
-"  small_name_count     int, count of small datasets to write\n"
-"  vlen_name_count      int, count of vlen datasets to write\n"
-"  detector_name_count  int, count of detector datasets to write\n"
+"  small_count     int, count of small datasets to write\n"
+"  vlen_count      int, count of vlen datasets to write\n"
+"  detector_count  int, count of detector datasets to write\n"
 
 "  small_shot_first   int, which shot, in the global timing counter for all writers, to start writing small datasets\n"
 "  vlen_shot_first   int, which shot, in the global timing counter for all writers, to start writing vlen datasets\n"
@@ -63,13 +59,13 @@ struct DaqWriterConfig {
 
   long num_shots;
 
-  int small_name_first;
-  int vlen_name_first;
-  int detector_name_first;
+  int small_first;
+  int vlen_first;
+  int detector_first;
 
-  int small_name_count;
-  int vlen_name_count;
-  int detector_name_count;
+  int small_count;
+  int vlen_count;
+  int detector_count;
 
   int small_shot_first;
   int vlen_shot_first;
@@ -105,12 +101,12 @@ void DaqWriterConfig::dump(FILE *fout) {
   fprintf(fout, "    group=%s\n", group.c_str());
   fprintf(fout, "    id=%d\n", id);
   fprintf(fout, "    num_shots=%ld\n", num_shots);
-  fprintf(fout, "    small_name_first=%d\n", small_name_first);
-  fprintf(fout, "    vlen_name_first=%d\n", vlen_name_first);
-  fprintf(fout, "    detector_name_first=%d\n", detector_name_first);
-  fprintf(fout, "    small_name_count=%d\n", small_name_count);
-  fprintf(fout, "    vlen_name_count=%d\n", vlen_name_count);
-  fprintf(fout, "    detector_name_count=%d\n", detector_name_count);
+  fprintf(fout, "    small_first=%d\n", small_first);
+  fprintf(fout, "    vlen_first=%d\n", vlen_first);
+  fprintf(fout, "    detector_first=%d\n", detector_first);
+  fprintf(fout, "    small_count=%d\n", small_count);
+  fprintf(fout, "    vlen_count=%d\n", vlen_count);
+  fprintf(fout, "    detector_count=%d\n", detector_count);
   fprintf(fout, "    small_shot_first=%d\n", small_shot_first);
   fprintf(fout, "    vlen_shot_first=%d\n", vlen_shot_first);
   fprintf(fout, "    detector_shot_first=%d\n", detector_shot_first);
@@ -298,11 +294,11 @@ void DaqWriter::create_all_groups_datasets_and_attributes() {
   CHECK_NONNEG(m_detector_group, "detector group");  
 
   create_number_groups(m_small_group, m_small_id_to_number_group, 
-                   m_config.small_name_first, m_config.small_name_count);
+                   m_config.small_first, m_config.small_count);
   create_number_groups(m_vlen_group, m_vlen_id_to_number_group, 
-                   m_config.vlen_name_first, m_config.vlen_name_count);
+                   m_config.vlen_first, m_config.vlen_count);
   create_number_groups(m_detector_group, m_detector_id_to_number_group, 
-                   m_config.detector_name_first, m_config.detector_name_count);
+                   m_config.detector_first, m_config.detector_count);
 
   create_fiducials_dsets(m_small_id_to_number_group, m_small_id_to_fiducials_dset);
   create_fiducials_dsets(m_vlen_id_to_number_group, m_vlen_id_to_fiducials_dset);
@@ -417,8 +413,8 @@ void DaqWriter::write_small(long fiducial) {
     auto small_time = Clock::now();
     auto diff = small_time - m_t0;
     auto nano = std::chrono::duration_cast<std::chrono::nanoseconds>(diff);
-    for (int small_id = m_config.small_name_first;
-         small_id < m_config.small_name_first + m_config.small_name_count;
+    for (int small_id = m_config.small_first;
+         small_id < m_config.small_first + m_config.small_count;
          ++small_id)
       {
         DsetInfo & fid_dset = m_small_id_to_fiducials_dset[small_id];
@@ -445,8 +441,8 @@ void DaqWriter::write_vlen(long fiducial) {
     m_next_vlen_count = std::max(m_config.vlen_min_per_shot, m_next_vlen_count);
     for (size_t idx = 0; idx < unsigned(m_next_vlen_count); ++idx) m_vlen_data[idx]=fiducial;
       
-    for (int vlen_id = m_config.vlen_name_first;
-         vlen_id < m_config.vlen_name_first + m_config.vlen_name_count;
+    for (int vlen_id = m_config.vlen_first;
+         vlen_id < m_config.vlen_first + m_config.vlen_count;
          ++vlen_id)
       {
         DsetInfo & fid_dset = m_vlen_id_to_fiducials_dset[vlen_id];
@@ -476,8 +472,8 @@ void DaqWriter::write_detector(long fiducial) {
       *idx = short(fiducial);
     }
       
-    for (int detector_id = m_config.detector_name_first;
-         detector_id < m_config.detector_name_first + m_config.detector_name_count;
+    for (int detector_id = m_config.detector_first;
+         detector_id < m_config.detector_first + m_config.detector_count;
          ++detector_id)
       {
         DsetInfo & fid_dset = m_detector_id_to_fiducials_dset[detector_id];
@@ -533,12 +529,12 @@ int main(int argc, char *argv[]) {
   config.group = std::string(argv[idx++]);
   config.id = atoi(argv[idx++]);
   config.num_shots = atol(argv[idx++]);
-  config.small_name_first = atoi(argv[idx++]);
-  config.vlen_name_first = atoi(argv[idx++]);
-  config.detector_name_first = atoi(argv[idx++]);
-  config.small_name_count = atoi(argv[idx++]);
-  config.vlen_name_count = atoi(argv[idx++]);
-  config.detector_name_count = atoi(argv[idx++]);
+  config.small_first = atoi(argv[idx++]);
+  config.vlen_first = atoi(argv[idx++]);
+  config.detector_first = atoi(argv[idx++]);
+  config.small_count = atoi(argv[idx++]);
+  config.vlen_count = atoi(argv[idx++]);
+  config.detector_count = atoi(argv[idx++]);
   config.small_shot_first = atoi(argv[idx++]);
   config.vlen_shot_first = atoi(argv[idx++]);
   config.detector_shot_first = atoi(argv[idx++]);

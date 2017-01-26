@@ -1,8 +1,14 @@
 #ifndef LC2DAQ_HH
 #define LC2DAQ_HH
 
+#include <chrono>
+
 #define CHECK_NONNEG(x , msg) check_nonneg(x, msg, __LINE__, __FILE__)
 void check_nonneg(int, const char *, int, const char *);
+
+typedef std::chrono::high_resolution_clock Clock;
+typedef std::map<int, hid_t>::const_iterator CMapIter;
+
 
 struct DsetInfo {
   hid_t dset_id;
