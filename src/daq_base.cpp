@@ -7,12 +7,32 @@
 #include "daq_base.h"
 
 DaqBase::DaqBase(const DaqBaseConfig &base_config) : m_base_config(base_config) {
-  static char idstr[128];
-  sprintf(idstr, "%4.4d", m_base_config.id);
-  m_basename = m_base_config.group + "-s" + idstr;
+  m_basename = form_basename(m_base_config.group, m_base_config.id);
   m_fname_h5 = m_base_config.rundir + "/hdf5/" + m_basename + ".h5";
   m_fname_pid = m_base_config.rundir + "/pids/" + m_basename + ".pid";
   m_fname_finished = m_base_config.rundir + "/logs/" + m_basename + ".finished";
+}
+
+std::string DaqBase::form_basename(std::string group, int idx) {
+  static char idstr[128];
+  sprintf(idstr, "%4.4d", idx);
+  return group + "-s" + idstr;
+}
+
+void DaqBase::dump(FILE *fout) {
+  fprintf(fout, "basename:  %s\n", m_basename.c_str());
+  fprintf(fout, "fname_h5:  %s\n", m_fname_h5.c_str());
+  fprintf(fout, "fname_pid: %s\n", m_fname_pid.c_str());
+  
+}
+
+void DaqBase::run_setup() {
+  std::chrono::time_point<std::chrono::system_clock> start_run, end_run;
+  start_run = std::chrono::system_clock::now();
+  std::time_t start_run_time = std::chrono::system_clock::to_time_t(start_run);
+  m_t0 = Clock::now();
+    
+  std::cout << m_basename << ": start_time: " << std::ctime(&start_run_time) << std::endl;
 }
 
 void DaqBase::write_pid_file() {

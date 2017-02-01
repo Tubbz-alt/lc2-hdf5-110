@@ -169,8 +169,6 @@ class DaqWriter : public DaqBase {
   std::map<int, DsetInfo> m_vlen_id_to_blob_start_dset,
     m_vlen_id_to_blob_count_dset;
   
-  std::chrono::time_point<Clock> m_t0, m_t1;
-
   int m_next_small, m_next_vlen, m_next_detector;
   int m_next_vlen_count;
   std::vector<long> m_vlen_data;
@@ -226,13 +224,7 @@ DaqWriter::~DaqWriter() {}
 
 
 void DaqWriter::run() {
-  std::chrono::time_point<std::chrono::system_clock> start_run, end_run;
-  start_run = std::chrono::system_clock::now();
-  std::time_t start_run_time = std::chrono::system_clock::to_time_t(start_run);
-  m_t0 = Clock::now();
-    
-  std::cout << m_basename << ": start_time: " << std::ctime(&start_run_time) << std::endl;
-  
+  DaqBase::run_setup();
   m_config.dump(::stdout);
   create_file();
   create_all_groups_datasets_and_attributes();

@@ -5,8 +5,13 @@
 #include <vector>
 #include <chrono>
 
+#include "hdf5.h"
+
 #define CHECK_NONNEG(x , msg) check_nonneg(x, msg, __LINE__, __FILE__)
-void check_nonneg(int, const char *, int, const char *);
+void check_nonneg(long long int, const char *, int, const char *);
+
+#define CHECK_POS(x , msg) check_pos(x, msg, __LINE__, __FILE__)
+void check_pos(long long int, const char *, int, const char *);
 
 typedef std::chrono::high_resolution_clock Clock;
 typedef std::map<int, hid_t>::const_iterator CMapIter;

@@ -67,13 +67,7 @@ class Jobs(object):
             if len(waiting_for)==0:
                 print("wait - all jobs done")
                 break
-            if self.config['time']>0:
-                time_waited = time.time()-t0
-                if time_waited > self.config['time']:
-                    print("wait - hit time delay - killing all remaining jobs")
-                    self.kill_all(waiting_for)
-                    break
-            time.sleep(3)
+            time.sleep(2)
 
     def kill_all(self, waiting_for=None):
         def filter_based_on(fnames, waiting_for):

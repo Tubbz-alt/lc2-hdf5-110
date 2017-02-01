@@ -5,9 +5,9 @@ rundir: runA
 num_samples: 1e6
 verbose: 1
 flush_interval: 100
-time: 0
 writers_hang: False
-  
+masters_hang: False
+    
 # config file only options
 lfs:
   do_stripe: True
@@ -15,7 +15,7 @@ lfs:
   OST_start_index: -1
   count: 19
 
-daq_writers:
+daq_writer:
   num: 3
   num_per_host: 3
   hosts:

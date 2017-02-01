@@ -2,7 +2,7 @@
 #include <vector>
 #include <iostream>
 #include <numeric>
-
+#include <unistd.h>
 #include "hdf5.h"
 
 #include "ana_daq_util.h"
@@ -163,21 +163,83 @@ bool DaqMasterConfig::parse_command_line(int argc, char *argv[], const std::stri
 
 class DaqMaster : public DaqBase {
   DaqMasterConfig m_config;
-  std::string m_basename, m_fname_h5, m_fname_pid, m_fname_finished;
   std::vector<std::string> m_writer_basenames, m_writer_fnames_h5;
-
+  std::vector<hid_t> m_writer_h5;
+  
 public:
   DaqMaster(const DaqMasterConfig &);
   ~DaqMaster();
 
   void run();
+  void wait_for_SWMR_access_to_all_writers();
+  void create_master_file();
+  void create_all_master_groups_datasets_and_attributes();
+  void start_SWMR_access_to_master_file();
+  void close_files();
+  void dump(FILE *);
 };
 
 DaqMaster::DaqMaster(const DaqMasterConfig &config)
   : DaqBase(config), m_config(config) {
+  for (int writer = 0; writer < m_config.num_writers; ++writer) {
+    std::string basename = DaqBase::form_basename(m_config.writer_group, writer);
+    m_writer_basenames.push_back(basename);
+    m_writer_fnames_h5.push_back(m_config.rundir + "/hdf5/" + basename + ".h5");
+    m_writer_h5.push_back(-1);
+  }
+}
+
+void DaqMaster::dump(FILE *fout) {
+  DaqBase::dump(fout);
+  fprintf(fout, "======= DaqMaster.dump =======\n");
 }
 
 void DaqMaster::run() {
+  DaqBase::run_setup();
+  m_config.dump(::stdout);
+  dump(::stdout);
+  wait_for_SWMR_access_to_all_writers();
+  create_master_file();
+  create_all_master_groups_datasets_and_attributes();
+  start_SWMR_access_to_master_file();  
+
+  close_files();
+}
+
+void DaqMaster::close_files() {
+  for (int writer = 0; writer < m_config.num_writers; ++writer) {
+    hid_t h5 = m_writer_h5.at(writer);
+    CHECK_NONNEG( H5Fclose( h5 ), "h5fclose - daqmaster  - writer");
+  }
+}
+
+void DaqMaster::wait_for_SWMR_access_to_all_writers() {
+  int writer_currently_waiting_for = 0;
+  while (writer_currently_waiting_for < m_config.num_writers) {
+    auto fname = m_writer_fnames_h5.at(writer_currently_waiting_for).c_str();
+    FILE *fp = fopen(fname, "r");
+    if (NULL != fp) {
+      if (m_config.verbose) fprintf(stdout, "daq_master: found %s\n" , fname);
+      fclose(fp);
+      hid_t h5 = H5Fopen(fname, H5F_ACC_RDONLY | H5F_ACC_SWMR_READ, H5P_DEFAULT);
+      CHECK_POS(h5, "H5Fopen master on writer file");
+      m_writer_h5.at(writer_currently_waiting_for) = h5;
+      ++writer_currently_waiting_for;
+    } else {
+      if (m_config.verbose) fprintf(stdout, "daq_master: still waiting for %s\n" , m_writer_fnames_h5.at(writer_currently_waiting_for).c_str());
+      sleep(1);
+    }
+  }
+  
+}
+
+void DaqMaster::create_master_file() {
+}
+
+void DaqMaster::create_all_master_groups_datasets_and_attributes() {
+}
+
+void DaqMaster::start_SWMR_access_to_master_file() {
 }
 
 DaqMaster::~DaqMaster() {

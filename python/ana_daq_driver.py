@@ -2,6 +2,7 @@
 
 import os
 import sys
+import glob
 import copy
 import math
 import time
@@ -47,7 +48,11 @@ def getParser():
                         help='kill any jobs in progress for the given prefix/config')
     parser.add_argument('--writer', action='store_true',
                         help='run one writer from local, for testing')
+    parser.add_argument('--master', action='store_true',
+                        help='run one writer from local, for testing. First run to get writer output.')
     parser.add_argument('--writers_hang', action='store_true',
+                        help="have writers hang when done")
+    parser.add_argument('--masters_hang', action='store_true',
                         help="have writers hang when done")
     return parser
 
@@ -64,7 +69,7 @@ def divide_datasets_between_writers(config):
 
     For example, if the config looks like:
 
-    daq_writers:
+    daq_writer:
       num: 3
       datasets:
         small:
@@ -89,7 +94,7 @@ def divide_datasets_between_writers(config):
     'small': {'first_dset': 7, 'num_dsets': 3, 'start': 0, 'stride': 1},
     'vlen': {'first_dset': 2, 'num_dsets': 1, 'start': 0, 'stride': 1}}]
     '''
-    cfg = config['daq_writers']
+    cfg = config['daq_writer']
     num_writers = cfg['num']
     
     dset_types = ['small','vlen','detector']
@@ -122,8 +127,19 @@ def divide_datasets_between_writers(config):
     return writers
 
 
-def prepare_output_directory(config):
+def prepare_output_directory(config, master):
     rundir = os.path.join(config['rootdir'], config['rundir'])
+    hdf5_path = os.path.join(rundir, 'hdf5')
+    log_path =  os.path.join(rundir, 'logs')
+    pid_path =  os.path.join(rundir, 'pids')
+    results_path =  os.path.join(rundir, 'results')
+
+    if master:
+        assert os.path.exists(rundir), "rundir not present for master run"
+        assert os.path.exists(hdf5_path), "no hdf5 dir"
+        assert len(glob.glob(os.path.join(hdf5_path, '*.h5')))>0, "no h5 files in %s" % hdf5_path
+        return
+    
     if os.path.exists(rundir):
         if config['force']:
             print("ana_daq_driver: Removing directory %s" % rundir)
@@ -134,10 +150,6 @@ def prepare_output_directory(config):
             sys.exit(1)
             
     os.mkdir(rundir)
-    hdf5_path = os.path.join(rundir, 'hdf5')
-    log_path =  os.path.join(rundir, 'logs')
-    pid_path =  os.path.join(rundir, 'pids')
-    results_path =  os.path.join(rundir, 'results')
 
     os.mkdir(hdf5_path)
     os.mkdir(log_path)
@@ -166,7 +178,7 @@ def construct_daq_writer_command_lines(daq_writers, config, args):
     assert os.path.exists(logdir)
     assert os.path.exists(piddir)
 
-    group = 'daq_writers'
+    group = 'daq_writer'
     command_lines = []
     for idx, writer in enumerate(daq_writers):
         num_shots = int(round(float(config['num_samples'])))
@@ -182,13 +194,13 @@ def construct_daq_writer_command_lines(daq_writers, config, args):
         small_shot_stride = int(writer['small']['stride'])
         vlen_shot_stride = int(writer['vlen']['stride'])
         detector_shot_stride = int(writer['detector']['stride'])
-        small_chunksize = int(config['daq_writers']['datasets']['small']['chunksize'])
-        vlen_chunksize = int(config['daq_writers']['datasets']['vlen']['chunksize'])
-        detector_chunksize = int(config['daq_writers']['datasets']['detector']['chunksize'])
-        vlen_min_per_shot = int(config['daq_writers']['datasets']['vlen']['min_per_shot'])
-        vlen_max_per_shot = int(config['daq_writers']['datasets']['vlen']['max_per_shot'])
-        detector_rows = int(config['daq_writers']['datasets']['detector']['dim'][0])
-        detector_columns = int(config['daq_writers']['datasets']['detector']['dim'][1])
+        small_chunksize = int(config['daq_writer']['datasets']['small']['chunksize'])
+        vlen_chunksize = int(config['daq_writer']['datasets']['vlen']['chunksize'])
+        detector_chunksize = int(config['daq_writer']['datasets']['detector']['chunksize'])
+        vlen_min_per_shot = int(config['daq_writer']['datasets']['vlen']['min_per_shot'])
+        vlen_max_per_shot = int(config['daq_writer']['datasets']['vlen']['max_per_shot'])
+        detector_rows = int(config['daq_writer']['datasets']['detector']['dim'][0])
+        detector_columns = int(config['daq_writer']['datasets']['detector']['dim'][1])
         flush_interval = int(config['flush_interval'])
         writers_hang = int(config['writers_hang'])
 
@@ -230,7 +242,67 @@ def construct_daq_writer_command_lines(daq_writers, config, args):
         command_lines.append(cmd)
     return command_lines
 
+def add_args(daq_writers, ky1, ky2):
+    cmd = ''
+    for writer in daq_writers:
+        cmd += ' %d' % writer[ky1][ky2]
+    return cmd
 
+def construct_daq_master_command_lines(daq_writers, config, args):
+    rundir = os.path.join(config['rootdir'], config['rundir'])
+    h5dir = os.path.join(rundir, 'hdf5')
+    logdir = os.path.join(rundir, 'logs')
+    piddir = os.path.join(rundir, 'pids')
+    assert os.path.exists(h5dir)
+    assert os.path.exists(logdir)
+    assert os.path.exists(piddir)
+
+    group = 'daq_master'
+
+    num_shots = int(round(float(config['num_samples'])))
+    small_chunksize = int(config['daq_writer']['datasets']['small']['chunksize'])
+    vlen_chunksize = int(config['daq_writer']['datasets']['vlen']['chunksize'])
+    detector_chunksize = int(config['daq_writer']['datasets']['detector']['chunksize'])
+    detector_rows = int(config['daq_writer']['datasets']['detector']['dim'][0])
+    detector_columns = int(config['daq_writer']['datasets']['detector']['dim'][1])
+    flush_interval = int(config['flush_interval'])
+    masters_hang = int(config['masters_hang'])
+
+    command_lines = []
+    for idx in range(config['daq_master']['num']):
+        cmd = 'bin/daq_master %d %s %s %d ' % (config['verbose'], rundir, group, idx)
+        cmd += ' '.join(map(str, [num_shots,
+                                  small_chunksize,
+                                  vlen_chunksize,
+                                  detector_chunksize,
+                                  detector_rows,
+                                  detector_columns,
+                                  flush_interval,
+                                  masters_hang]))
+        cmd += (' daq_writer %d ' % config['daq_writer']['num'])
+
+        cmd += add_args(daq_writers, 'small', 'first_dset')
+        cmd += add_args(daq_writers, 'vlen', 'first_dset')
+        cmd += add_args(daq_writers, 'detector', 'first_dset')
+
+        cmd += add_args(daq_writers, 'small', 'num_dsets')
+        cmd += add_args(daq_writers, 'vlen', 'num_dsets')
+        cmd += add_args(daq_writers, 'detector', 'num_dsets')
+
+        cmd += add_args(daq_writers, 'small', 'start')
+        cmd += add_args(daq_writers, 'vlen', 'start')
+        cmd += add_args(daq_writers, 'detector', 'start')
+        
+        cmd += add_args(daq_writers, 'small', 'stride')
+        cmd += add_args(daq_writers, 'vlen', 'stride')
+        cmd += add_args(daq_writers, 'detector', 'stride')
+                        
+        command_lines.append(cmd)
+
+    return command_lines
+        
+
+    
 def check_structure(config):
     structure = {'force':'value',
                  'rootdir':'value',
@@ -239,46 +311,45 @@ def check_structure(config):
                  'verbose':'value',
                  'flush_interval':'value',
                  'writers_hang':'value',
+                 'masters_hang':'value',
                  'lfs':{'do_stripe':'value',
                         'stripe_size_mb':'value',
                         'OST_start_index':'value',
                         'count':'value',
                     },
-                 'daq_writers':{'num':'value',
-                                'num_per_host':'value',
-                                'hosts':'list',
-                                'datasets':{'small':{'num':'value',
-                                                     'chunksize':'value',
-                                                     'shots_per_sample':'value',
-                                                     },
-                                            'vlen':{'num':'value',
+                 'daq_writer':{'num':'value',
+                               'num_per_host':'value',
+                               'hosts':'list',
+                               'datasets':{'small':{'num':'value',
                                                     'chunksize':'value',
                                                     'shots_per_sample':'value',
-                                                    'min_per_shot':'value',
-                                                    'max_per_shot':'value',
-                                                    
-                                                     },
-                                            'detector':{'num':'value',
-                                                        'chunksize':'value',
-                                                        'shots_per_sample':'value',
-                                                        'dim':'list'
-                                                     },
-                                        },
-                            },
+                               },
+                                           'vlen':{'num':'value',
+                                                   'chunksize':'value',
+                                                   'shots_per_sample':'value',
+                                                   'min_per_shot':'value',
+                                                   'max_per_shot':'value',
+                                           },
+                                           'detector':{'num':'value',
+                                                       'chunksize':'value',
+                                                       'shots_per_sample':'value',
+                                                       'dim':'list'
+                                           },
+                               },
+                 },
                  'daq_master':{'num':'value',
                                'num_per_host':'value',
                                'hosts':'list',
-                               },
+                 },
                  'ana_reader_master':{'num':'value',
                                 'num_per_host':'value',
                                 'hosts':'list',
-                               
-                                  },
+                 },
                  'ana_reader_stream':{'num':'value',
                                 'num_per_host':'value',
                                 'hosts':'list',
-                               },
-             }
+                 },
+    }
     def recurse_check(correct, config, stack):
         assert isinstance(correct, dict), "check is not a dict at %s" % stack
         assert isinstance(config, dict), "config is not a dict at %s" % stack
@@ -303,7 +374,7 @@ def check_structure(config):
 def check_config(config):
     check_structure(config)
     assert os.path.exists(config['rootdir'])
-    for group in ['daq_writers','ana_reader_master', 'ana_reader_stream']:
+    for group in ['daq_writer','daq_master', 'ana_reader_master', 'ana_reader_stream']:
         cfg = config[group]
         if cfg['num']<=0:
             continue
@@ -313,10 +384,10 @@ def check_config(config):
         hosts_needed = int(math.ceil(cfg['num']/cfg['num_per_host']))
         assert hosts_needed <= num_hosts, ("%s: not enought hosts (%d) to support " + \
                                            "%d processes at %d per host") % (group, num_hosts, cfg['num'], cfg['num_per_host'])
-    vlen_min = config['daq_writers']['datasets']['vlen']['min_per_shot']
-    vlen_max = config['daq_writers']['datasets']['vlen']['max_per_shot']
+    vlen_min = config['daq_writer']['datasets']['vlen']['min_per_shot']
+    vlen_max = config['daq_writer']['datasets']['vlen']['max_per_shot']
     assert vlen_min <= vlen_max, "vlen min > max"
-    detdim = config['daq_writers']['datasets']['detector']['dim']
+    detdim = config['daq_writer']['datasets']['detector']['dim']
     assert isinstance(detdim, list)
     assert 2 == len(detdim), "detector dim must have 2 values"
 
@@ -340,7 +411,7 @@ def run(argv):
     
     config = yaml.load(open(args.config,'r'))
     check_config(config)
-    for ky in ['force','rootdir','rundir','verbose','flush_interval', 'writers_hang', 'num_samples']:
+    for ky in ['force','rootdir','rundir','verbose','flush_interval', 'writers_hang', 'masters_hang', 'num_samples']:
         val = getattr(args,ky)
         if val in [None, False]: continue
         print("replacing config[%s] with %s (from command line)" % (ky,val))
@@ -352,9 +423,11 @@ def run(argv):
         jobs.kill_all()
         return
 
-    prepare_output_directory(config)
+    prepare_output_directory(config, args.master)
+    
     daq_writers = divide_datasets_between_writers(config)
     daq_writer_commands = construct_daq_writer_command_lines(daq_writers, config, args)
+    daq_master_commands = construct_daq_master_command_lines(daq_writers, config, args)
 
     if args.writer:
         print("=======")
@@ -364,9 +437,17 @@ def run(argv):
         os.system(cmd)
         return
         
-    daq_writer_hosts = assign_hosts('daq_writers', config)
+    if args.master:
+        print("=======")
+        print(" running daq_master")
+        cmd = daq_master_commands[0]
+        print(cmd)
+        os.system(cmd)
+        return
+        
+    daq_writer_hosts = assign_hosts('daq_writer', config)
 
-    jobs.launch('daq_writers', daq_writer_commands, daq_writer_hosts)
+    jobs.launch('daq_writer', daq_writer_commands, daq_writer_hosts)
     time.sleep(1)
     jobs.wait()
 
