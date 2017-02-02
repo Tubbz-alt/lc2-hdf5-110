@@ -148,7 +148,7 @@ bool DaqWriterConfig::parse_command_line(int argc, char *argv[], const std::stri
 class DaqWriter : public DaqBase {
   DaqWriterConfig m_config;
 
-  hid_t m_fid, m_fapl, m_small_group, m_vlen_group, m_detector_group;
+  hid_t m_writer_fid;
 
   std::map<int, hid_t> m_small_id_to_number_group,
     m_vlen_id_to_number_group,
@@ -186,7 +186,6 @@ public:
   void flush_data(long fiducial);
 
 protected:
-  void create_number_groups(hid_t, std::map<int, hid_t> &, int, int);
   void create_fiducials_dsets(const std::map<int, hid_t> &, std::map<int, DsetInfo> &);
   void create_nano_dsets(const std::map<int, hid_t> &, std::map<int, DsetInfo> &);
 
@@ -241,7 +240,7 @@ void DaqWriter::run() {
     fflush(::stdout);
     while (true) {}
   }
-  CHECK_NONNEG( H5Fclose(m_fid), "H5Fclose");
+  CHECK_NONNEG( H5Fclose(m_writer_fid), "H5Fclose");
   m_t1 = Clock::now();
 
   auto total_diff = m_t1 - m_t0;
@@ -251,31 +250,26 @@ void DaqWriter::run() {
 
 
 void DaqWriter::create_file() {
-  m_fapl = H5Pcreate(H5P_FILE_ACCESS);
-  CHECK_NONNEG( H5Pset_libver_bounds(m_fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST), "set_libver_bounds" );
-  m_fid = H5Fcreate(m_fname_h5.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, m_fapl);
-  CHECK_NONNEG(m_fid, "creating file");
+  hid_t fapl = H5Pcreate(H5P_FILE_ACCESS);
+  CHECK_NONNEG( H5Pset_libver_bounds(fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST), "set_libver_bounds" );
+  m_writer_fid = H5Fcreate(m_fname_h5.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, fapl);
+  CHECK_NONNEG(m_writer_fid, "creating file");
   if (m_config.verbose) {
     printf("created file: %s\n", m_fname_h5.c_str());
     fflush(::stdout);
   }
-  CHECK_NONNEG( H5Pclose(m_fapl), "close file properties - writer");
+  CHECK_NONNEG( H5Pclose(fapl), "close file properties - writer");
 };
 
 
 void DaqWriter::create_all_groups_datasets_and_attributes() {
-  m_small_group = H5Gcreate2(m_fid, "small", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);  
-  m_vlen_group = H5Gcreate2(m_fid, "vlen", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);  
-  m_detector_group = H5Gcreate2(m_fid, "detctor", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);  
-  CHECK_NONNEG(m_small_group, "small group");
-  CHECK_NONNEG(m_vlen_group, "vlen group");
-  CHECK_NONNEG(m_detector_group, "detector group");  
-
-  create_number_groups(m_small_group, m_small_id_to_number_group, 
+  DaqBase::create_standard_groups(m_writer_fid);
+  
+  DaqBase::create_number_groups(m_small_group, m_small_id_to_number_group, 
                    m_config.small_name_first, m_config.small_count);
-  create_number_groups(m_vlen_group, m_vlen_id_to_number_group, 
+  DaqBase::create_number_groups(m_vlen_group, m_vlen_id_to_number_group, 
                    m_config.vlen_name_first, m_config.vlen_count);
-  create_number_groups(m_detector_group, m_detector_id_to_number_group, 
+  DaqBase::create_number_groups(m_detector_group, m_detector_id_to_number_group, 
                    m_config.detector_name_first, m_config.detector_count);
 
   create_fiducials_dsets(m_small_id_to_number_group, m_small_id_to_fiducials_dset);
@@ -295,16 +289,6 @@ void DaqWriter::create_all_groups_datasets_and_attributes() {
     fflush(::stdout);
   }
 };
-
-void DaqWriter::create_number_groups(hid_t parent, std::map<int, hid_t> &name_to_group, int first, int count) {
-  for (int name = first; name < (first + count); ++name) {
-    char strname[128];
-    sprintf(strname, "%5.5d", name);
-    hid_t dset_group = H5Gcreate2(parent, strname, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    CHECK_NONNEG(dset_group, strname);
-    name_to_group[name]=dset_group;
-  } 
-}
 
 void DaqWriter::create_small_dsets_helper(const std::map<int, hid_t> &id_to_parent,
                                           std::map<int, DsetInfo> &id_to_dset,
@@ -366,7 +350,7 @@ void DaqWriter::create_vlen_blob_and_index_dsets() {
     
 
 void DaqWriter::start_SWMR_access_to_file() {
-  CHECK_NONNEG(H5Fstart_swmr_write(m_fid), "start_swmr");
+  CHECK_NONNEG(H5Fstart_swmr_write(m_writer_fid), "start_swmr");
   if (m_config.verbose) {
     printf("started SWMR access\n");
     fflush(::stdout);

@@ -2,7 +2,7 @@
 force: False
 rootdir: /reg/d/ana01/temp/davidsch/lc2
 rundir: runA
-num_samples: 1e6
+num_samples: 1000
 verbose: 1
 flush_interval: 100
 writers_hang: False
@@ -22,12 +22,12 @@ daq_writer:
     - local
   datasets:
     small:
-      num: 1000
-      chunksize: 10000
+      num: 100
+      chunksize: 600
       shots_per_sample: 1
     vlen:
       num: 10
-      chunksize: 10000
+      chunksize: 600
       shots_per_sample: 1
       min_per_shot: 5
       max_per_shot: 15

@@ -53,6 +53,48 @@ void DaqBase::write_pid_file() {
   fclose(pid_f);
 }
 
+
+void DaqBase::create_standard_groups(hid_t parent) {
+  m_small_group = H5Gcreate2(parent, "small", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);  
+  m_vlen_group = H5Gcreate2(parent, "vlen", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);  
+  m_detector_group = H5Gcreate2(parent, "detector", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);  
+  CHECK_NONNEG(m_small_group, "small group");
+  CHECK_NONNEG(m_vlen_group, "vlen group");
+  CHECK_NONNEG(m_detector_group, "detector group");  
+}
+
+
+void DaqBase::create_number_groups(hid_t parent, std::map<int, hid_t> &name_to_group, int first, int count) {
+  for (int name = first; name < (first + count); ++name) {
+    char strname[128];
+    sprintf(strname, "%5.5d", name);
+    hid_t dset_group = H5Gcreate2(parent, strname, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    CHECK_NONNEG(dset_group, strname);
+    name_to_group[name]=dset_group;
+  } 
+}
+
+
+hid_t DaqBase::get_dataset(hid_t fid, const char *group1, int group2, const char *dsetname) {
+  hid_t gid_group1 = H5Gopen2(fid, group1, H5P_DEFAULT);
+  CHECK_NONNEG(gid_group1, "base - get dataset - first group");
+
+  char group2str[128];
+  sprintf(group2str, "%5.5d", group2);
+  
+  hid_t gid_group2 = H5Gopen2(gid_group1, group2str, H5P_DEFAULT);
+  CHECK_NONNEG(gid_group2, "base - get dataset - 2nd group");
+
+  hid_t dset = H5Dopen2(gid_group2, dsetname, H5P_DEFAULT);
+  CHECK_NONNEG(dset, "base - get dataset - final dset name");
+
+  CHECK_NONNEG( H5Gclose(gid_group2), "base - get dataset - closing group2");
+  CHECK_NONNEG( H5Gclose(gid_group1), "base - get dataset - closing group1");
+
+  return dset;
+}
+
+
 DaqBase::~DaqBase() {
   FILE *finished_f = fopen(m_fname_finished.c_str(), "w");
   if (NULL==finished_f) {

@@ -19,6 +19,31 @@ void check_pos(long long int err, const char *msg, int lineno, const char *fname
   } 
 }
 
+void divide_evenly(int total, int splits, std::vector<int> &offsets, std::vector<int> &counts) {
+  if (splits <= 0) throw std::runtime_error("divide_evenly - splits <= 0");
+  if (total <= 0) throw std::runtime_error("divide_evenly - total <= 0");
+
+  int kk = total / splits;
+  int rr = total % splits;
+
+  if (((kk * splits) + rr) !=  total) throw std::runtime_error("divide_evenly - math error");
+  
+  offsets.clear();
+  counts.clear();
+  
+  int next_offset = 0;
+  for (int cur = 0; cur < splits; ++cur) {
+    offsets.push_back(next_offset);
+    int cur_count = kk;
+    if (rr > 0) {
+      cur_count += 1;
+      --rr;
+    }
+    counts.push_back(cur_count);
+    next_offset += cur_count;
+  }  
+}
+
 
 DsetInfo create_1d_dataset(hid_t parent, const char *dset, hid_t h5_type, hsize_t chunk_size, size_t type_size_bytes) {
   int rank = 1;

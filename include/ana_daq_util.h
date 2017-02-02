@@ -16,6 +16,7 @@ void check_pos(long long int, const char *, int, const char *);
 typedef std::chrono::high_resolution_clock Clock;
 typedef std::map<int, hid_t>::const_iterator CMapIter;
 
+void divide_evenly(int total, int splits, std::vector<int> &offsets, std::vector<int> &counts);
 
 struct DsetInfo {
   hid_t dset_id;
