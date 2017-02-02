@@ -1,5 +1,6 @@
 #include <string>
 #include <vector>
+#include <set>
 #include <iostream>
 #include <numeric>
 #include <unistd.h>
@@ -156,7 +157,24 @@ bool DaqMasterConfig::parse_command_line(int argc, char *argv[], const std::stri
   
   small_count_all = std::accumulate(small_count.begin(), small_count.end(), 0);
   vlen_count_all = std::accumulate(vlen_count.begin(), vlen_count.end(), 0);
-  detector_count_all = std::accumulate(detector_count.begin(), detector_count.end(), 0);
+  
+  // check for one detector, but multiple small and vlen
+  std::set<int> unique_small(small_name_first.begin(), small_name_first.end());
+  if (unique_small.size() != small_name_first.size()) {
+    throw std::runtime_error("FATAL: daq_master assumes more small datasets than daq_writers");
+  }
+
+  std::set<int> unique_vlen(vlen_name_first.begin(), vlen_name_first.end());
+  if (unique_vlen.size() != vlen_name_first.size()) {
+    throw std::runtime_error("FATAL: daq_master assumes more small datasets than daq_writers");
+  }
+
+  std::set<int> unique_det(detector_name_first.begin(), detector_name_first.end());
+  if (unique_det.size() != 1) {
+    throw std::runtime_error("FATAL: daq_master assumes only one dectetor spread among writers");
+  }
+  detector_count_all = 1;
+
   return true;
   
 }
@@ -165,7 +183,9 @@ class DaqMaster : public DaqBase {
   DaqMasterConfig m_config;
   std::vector<std::string> m_writer_basenames, m_writer_fnames_h5;
   std::vector<hid_t> m_writer_h5;
-  
+  hid_t m_master_fapl, m_master_fid;
+  std::string m_master_fname;
+
 public:
   DaqMaster(const DaqMasterConfig &);
   ~DaqMaster();
@@ -175,6 +195,7 @@ public:
   void create_master_file();
   void create_all_master_groups_datasets_and_attributes();
   void start_SWMR_access_to_master_file();
+  void translation_loop();
   void close_files();
   void dump(FILE *);
 };
@@ -202,8 +223,11 @@ void DaqMaster::run() {
   create_master_file();
   create_all_master_groups_datasets_and_attributes();
   start_SWMR_access_to_master_file();  
-
+  translation_loop();
   close_files();
+}
+
+void DaqMaster::translation_loop() {
 }
 
 void DaqMaster::close_files() {
@@ -234,6 +258,15 @@ void DaqMaster::wait_for_SWMR_access_to_all_writers() {
 }
 
 void DaqMaster::create_master_file() {
+  m_master_fapl = H5Pcreate(H5P_FILE_ACCESS);
+  CHECK_NONNEG( H5Pset_libver_bounds(m_master_fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST), "set_libver_bounds" );
+  m_master_fid = H5Fcreate(m_fname_h5.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, m_fapl);
+  CHECK_NONNEG(m_fid, "creating file");
+  if (m_config.verbose) {
+    printf("created file: %s\n", m_fname_h5.c_str());
+    fflush(::stdout);
+  }
+  
 }
 
 void DaqMaster::create_all_master_groups_datasets_and_attributes() {

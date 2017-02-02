@@ -259,6 +259,7 @@ void DaqWriter::create_file() {
     printf("created file: %s\n", m_fname_h5.c_str());
     fflush(::stdout);
   }
+  CHECK_NONNEG( H5Pclose(m_fapl), "close file properties - writer");
 };
 
 
