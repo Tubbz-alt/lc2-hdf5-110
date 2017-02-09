@@ -1,38 +1,3 @@
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Copyright by The HDF Group.                                               *
- * Copyright by the Board of Trustees of the University of Illinois.         *
- * All rights reserved.                                                      *
- *                                                                           *
- * This file is part of HDF5.  The full HDF5 copyright notice, including     *
- * terms governing use, modification, and redistribution, is contained in    *
- * the files COPYING and Copyright.html.  COPYING can be found at the root   *
- * of the source code distribution tree; Copyright.html can be found at the  *
- * root level of an installed copy of the electronic HDF5 document set and   *
- * is linked from the top-level documents page.  It can also be found at     *
- * http://hdfgroup.org/HDF5/doc/Copyright.html.  If you do not have          *
- * access to either file, you may request a copy from help@hdfgroup.org.     *
- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-
-/************************************************************
-
-  This example illustrates the concept of virtual dataset.
-  The program  creates three 1-dim source datasets and writes
-  data to them. Then it creates a 2-dim virtual dataset and
-  maps the first three rows of the virtual dataset to the data 
-  in the source datasets. Elements of a row are mapped to all 
-  elements of the corresponding source dataset.
-  The fourth row is not mapped and will be filled with the fill 
-  values when virtual dataset is read back. 
-   
-  The program closes all datasets, and then reopens the virtual
-  dataset, and finds and prints its creation properties.
-  Then it reads the values. 
-
-  This file is intended for use with HDF5 Library version 1.10
-
- ************************************************************/
-/* EIP Add link to the picture */
-
 #include "hdf5.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -91,14 +56,13 @@ main (void)
                               H5P_DEFAULT, dcpl, H5P_DEFAULT) );
     CHECK( H5Pclose( dcpl ) );
     CHECK( H5Sclose ( space_create ) );
-
+    
     CHECK( H5Fstart_swmr_write( file ) );
     
-    wdata = 10 + WRITE_COUNT*ii;
     for (jj=0; jj < WRITE_COUNT; ++jj) {
       file_dest = jj;
       new_extent = jj+1;
-      wdata += 1;
+      wdata = (10 * ii) + jj;
       CHECK( H5Dset_extent( dset, &new_extent ) );
       space_write_file = CHECK( H5Dget_space( dset ) );
       CHECK( H5Sselect_hyperslab( space_write_file, H5S_SELECT_SET, &file_dest, NULL, &count1, NULL) );

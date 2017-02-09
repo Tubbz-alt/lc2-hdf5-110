@@ -1,38 +1,3 @@
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Copyright by The HDF Group.                                               *
- * Copyright by the Board of Trustees of the University of Illinois.         *
- * All rights reserved.                                                      *
- *                                                                           *
- * This file is part of HDF5.  The full HDF5 copyright notice, including     *
- * terms governing use, modification, and redistribution, is contained in    *
- * the files COPYING and Copyright.html.  COPYING can be found at the root   *
- * of the source code distribution tree; Copyright.html can be found at the  *
- * root level of an installed copy of the electronic HDF5 document set and   *
- * is linked from the top-level documents page.  It can also be found at     *
- * http://hdfgroup.org/HDF5/doc/Copyright.html.  If you do not have          *
- * access to either file, you may request a copy from help@hdfgroup.org.     *
- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-
-/************************************************************
-
-  This example illustrates the concept of virtual dataset.
-  The program  creates three 1-dim source datasets and writes
-  data to them. Then it creates a 2-dim virtual dataset and
-  maps the first three rows of the virtual dataset to the data 
-  in the source datasets. Elements of a row are mapped to all 
-  elements of the corresponding source dataset.
-  The fourth row is not mapped and will be filled with the fill 
-  values when virtual dataset is read back. 
-   
-  The program closes all datasets, and then reopens the virtual
-  dataset, and finds and prints its creation properties.
-  Then it reads the values. 
-
-  This file is intended for use with HDF5 Library version 1.10
-
- ************************************************************/
-/* EIP Add link to the picture */
-
 #include "hdf5.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,7 +17,7 @@ long long int check_nonneg(long long int val, const char *expression, int lineno
 #define DATASET      "VDS"
 #define RANK1           1
 #define NUM_SRCS        4
-#define SRC_WRITE_COUNT 6
+#define SRC_WRITE_COUNT 10 // 6
 
 const char *SRC_FILE[NUM_SRCS] = {
     "/reg/d/ana01/temp/davidsch/lc2/runA/a.h5",
@@ -100,7 +65,6 @@ main (void)
     start = ii;
     CHECK( H5Sselect_hyperslab (vds_space, H5S_SELECT_SET, &start, &stride, &count, &block) );
     CHECK( H5Pset_virtual (dcpl, vds_space, SRC_FILE[ii], SRC_DATASET[ii], src_space) );
-    printf("ii=%d success\n", ii);
   }
 
   start=0; stride=1; count=vds_dim; block=1;

@@ -20,9 +20,9 @@ h5vdsmod: modified_examples/h5_vds_srcs.c modified_examples/h5_vds_master.c
 	./h5_vds_srcs
 	./h5_vds_master
 	ls -l /reg/d/ana01/temp/davidsch/lc2/runA/vds.h5
-	h5ls /reg/d/ana01/temp/davidsch/lc2/runA/a.h5
-	h5ls /reg/d/ana01/temp/davidsch/lc2/runA/b.h5
-	h5ls /reg/d/ana01/temp/davidsch/lc2/runA/c.h5
+	h5ls -r /reg/d/ana01/temp/davidsch/lc2/runA/a.h5
+	h5ls -r /reg/d/ana01/temp/davidsch/lc2/runA/b.h5
+	h5ls -r /reg/d/ana01/temp/davidsch/lc2/runA/c.h5
 	h5dump -p /reg/d/ana01/temp/davidsch/lc2/runA/vds.h5
 
 #### DRIVER
