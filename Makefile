@@ -8,6 +8,23 @@ LDFLAGS=-L$(PREFIX)/lib -Llib -Wl,--enable-new-dtags -Wl,-rpath='$$ORIGIN:$$ORIG
 
 all: lib/libana_daq_util.so bin/daq_writer bin/daq_master bin/ana_reader_master bin/ana_reader_stream bin/ana_daq_driver
 
+h5vds: examples/h5_vds.c
+	h5c++ examples/h5_vds.c -o h5_vds
+	./h5_vds
+	ls -l vds.h5
+	h5dump -p vds.h5
+
+h5vdsmod: modified_examples/h5_vds_srcs.c modified_examples/h5_vds_master.c
+	h5c++ modified_examples/h5_vds_srcs.c -o h5_vds_srcs
+	h5c++ modified_examples/h5_vds_master.c -o h5_vds_master
+	./h5_vds_srcs
+	./h5_vds_master
+	ls -l /reg/d/ana01/temp/davidsch/lc2/runA/vds.h5
+	h5ls /reg/d/ana01/temp/davidsch/lc2/runA/a.h5
+	h5ls /reg/d/ana01/temp/davidsch/lc2/runA/b.h5
+	h5ls /reg/d/ana01/temp/davidsch/lc2/runA/c.h5
+	h5dump -p /reg/d/ana01/temp/davidsch/lc2/runA/vds.h5
+
 #### DRIVER
 bin/ana_daq_driver:
 	ln -s ../python/ana_daq_driver.py bin/ana_daq_driver
