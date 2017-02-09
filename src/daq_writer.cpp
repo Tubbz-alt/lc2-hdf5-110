@@ -240,7 +240,7 @@ void DaqWriter::run() {
     fflush(::stdout);
     while (true) {}
   }
-  CHECK_NONNEG( H5Fclose(m_writer_fid), "H5Fclose");
+  NONNEG( H5Fclose(m_writer_fid) );
   m_t1 = Clock::now();
 
   auto total_diff = m_t1 - m_t0;
@@ -250,15 +250,14 @@ void DaqWriter::run() {
 
 
 void DaqWriter::create_file() {
-  hid_t fapl = H5Pcreate(H5P_FILE_ACCESS);
-  CHECK_NONNEG( H5Pset_libver_bounds(fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST), "set_libver_bounds" );
-  m_writer_fid = H5Fcreate(m_fname_h5.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, fapl);
-  CHECK_NONNEG(m_writer_fid, "creating file");
+  hid_t fapl = NONNEG( H5Pcreate(H5P_FILE_ACCESS) );
+  NONNEG( H5Pset_libver_bounds(fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST) );
+  m_writer_fid = NONNEG( H5Fcreate(m_fname_h5.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, fapl) );
   if (m_config.verbose) {
     printf("created file: %s\n", m_fname_h5.c_str());
     fflush(::stdout);
   }
-  CHECK_NONNEG( H5Pclose(fapl), "close file properties - writer");
+  NONNEG( H5Pclose(fapl) );
 };
 
 
@@ -350,7 +349,7 @@ void DaqWriter::create_vlen_blob_and_index_dsets() {
     
 
 void DaqWriter::start_SWMR_access_to_file() {
-  CHECK_NONNEG(H5Fstart_swmr_write(m_writer_fid), "start_swmr");
+  NONNEG( H5Fstart_swmr_write(m_writer_fid) );
   if (m_config.verbose) {
     printf("started SWMR access\n");
     fflush(::stdout);
@@ -454,7 +453,7 @@ void DaqWriter::flush_helper(const std::map<int, DsetInfo> &id_to_dset) {
   typedef std::map<int, DsetInfo>::const_iterator Iter;
   for (Iter iter = id_to_dset.begin(); iter != id_to_dset.end(); ++iter) {
     const DsetInfo &dsetInfo = iter->second;
-    CHECK_NONNEG( H5Dflush(dsetInfo.dset_id), "flushing dataset");
+    NONNEG( H5Dflush(dsetInfo.dset_id) );
   }
 }
 

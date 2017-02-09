@@ -14,11 +14,11 @@ h5vds: examples/h5_vds.c
 	ls -l vds.h5
 	h5dump -p vds.h5
 
-h5vdsmod: modified_examples/h5_vds_srcs.c modified_examples/h5_vds_master.c
+h5vdsmod: modified_examples/h5_vds_srcs.c modified_examples/h5_vds_master.cpp
 	h5c++ modified_examples/h5_vds_srcs.c -o h5_vds_srcs
-	h5c++ modified_examples/h5_vds_master.c -o h5_vds_master
+	h5c++ modified_examples/h5_vds_master.cpp -o h5_vds_master
 	./h5_vds_srcs
-	./h5_vds_master
+	./h5_vds_master  0 1000 600 600 1 1024 1024 100 0 daq_writer 3  0 34 67 0 4 7 0 0 0 34 33 33 4 3 3 1 1 1 0 0 0 0 0 0 0 100 200 1 1 1 1 1 1 300 300 300
 	ls -l /reg/d/ana01/temp/davidsch/lc2/runA/vds.h5
 	h5ls -r /reg/d/ana01/temp/davidsch/lc2/runA/a.h5
 	h5ls -r /reg/d/ana01/temp/davidsch/lc2/runA/b.h5

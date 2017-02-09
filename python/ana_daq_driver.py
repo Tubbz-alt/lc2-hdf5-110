@@ -443,6 +443,8 @@ def run(argv):
         cmd = daq_master_commands[0]
         print(cmd)
         os.system(cmd)
+        check_cmd = 'h5dump -p /reg/d/ana01/temp/davidsch/lc2/runA/hdf5/daq_master-s0000.h5'
+        os.system(check_cmd)
         return
         
     daq_writer_hosts = assign_hosts('daq_writer', config)

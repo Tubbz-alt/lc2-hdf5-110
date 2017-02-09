@@ -16,9 +16,9 @@ long long int check_nonneg(long long int val, const char *expression, int lineno
 #define RANK1           1
 
 const char *SRC_FILE[] = {
-    "/reg/d/ana01/temp/davidsch/lc2/runA/a.h5",
-    "/reg/d/ana01/temp/davidsch/lc2/runA/b.h5",
-    "/reg/d/ana01/temp/davidsch/lc2/runA/c.h5"
+    "a.h5",
+    "b.h5",
+    "c.h5"
 };
 
 const char *SRC_DATASET = "A";

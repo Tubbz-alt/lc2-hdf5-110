@@ -230,16 +230,16 @@ void DaqMaster::dump(FILE *fout) {
 }
 
 void DaqMaster::run() {
-  DaqBase::run_setup();
-  m_config.dump(::stdout);
-  dump(::stdout);
-  wait_for_SWMR_access_to_all_writers();
-  //  create_master_file();
-  create_non_swmr_master_file();
+  //  DaqBase::run_setup();
+  //  m_config.dump(::stdout);
+  //  dump(::stdout);
+  //  wait_for_SWMR_access_to_all_writers();
+  create_master_file();
+  //  create_non_swmr_master_file();
   create_all_master_groups_datasets_and_attributes();
-  start_SWMR_access_to_master_file();  
-  translation_loop();
-  close_files();
+  //  start_SWMR_access_to_master_file();  
+  //  translation_loop();
+  //  close_files();
 }
 
 void DaqMaster::translation_loop() {
@@ -248,9 +248,9 @@ void DaqMaster::translation_loop() {
 void DaqMaster::close_files() {
   for (int writer = 0; writer < m_config.num_writers; ++writer) {
     hid_t h5 = m_writer_h5.at(writer);
-    CHECK_NONNEG( H5Fclose( h5 ), "h5fclose - daqmaster  - writer");
+    NONNEG( H5Fclose( h5 ) );
   }
-  CHECK_NONNEG( H5Fclose(m_master_fid), "h5fclose - daqmaster, the master file");
+  NONNEG( H5Fclose(m_master_fid) );
 }
 
 void DaqMaster::wait_for_SWMR_access_to_all_writers() {
@@ -261,8 +261,7 @@ void DaqMaster::wait_for_SWMR_access_to_all_writers() {
     if (NULL != fp) {
       if (m_config.verbose) fprintf(stdout, "daq_master: found %s\n" , fname);
       fclose(fp);
-      hid_t h5 = H5Fopen(fname, H5F_ACC_RDONLY | H5F_ACC_SWMR_READ, H5P_DEFAULT);
-      CHECK_POS(h5, "H5Fopen master on writer file");
+      hid_t h5 = POS( H5Fopen(fname, H5F_ACC_RDONLY | H5F_ACC_SWMR_READ, H5P_DEFAULT) );
       m_writer_h5.at(writer_currently_waiting_for) = h5;
       ++writer_currently_waiting_for;
     } else {
@@ -274,8 +273,7 @@ void DaqMaster::wait_for_SWMR_access_to_all_writers() {
 }
 
 void DaqMaster::create_non_swmr_master_file() {
-  m_master_fid = H5Fcreate(m_fname_h5.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-  CHECK_NONNEG(m_master_fid, "creating file");
+  m_master_fid = NONNEG( H5Fcreate(m_fname_h5.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT) );
   if (m_config.verbose) {
     fprintf(stdout, "created file: %s\n", m_fname_h5.c_str());
     fflush(::stdout);
@@ -283,22 +281,21 @@ void DaqMaster::create_non_swmr_master_file() {
 }
 
 void DaqMaster::create_master_file() {
-  hid_t fapl = H5Pcreate(H5P_FILE_ACCESS);
-  CHECK_NONNEG( H5Pset_libver_bounds(fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST), "set_libver_bounds" );
-  m_master_fid = H5Fcreate(m_fname_h5.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, fapl);
-  CHECK_NONNEG(m_master_fid, "creating file");
+  hid_t fapl = NONNEG( H5Pcreate(H5P_FILE_ACCESS) );
+  NONNEG( H5Pset_libver_bounds(fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST) );
+  m_master_fid = NONNEG( H5Fcreate(m_fname_h5.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, fapl) );
   if (m_config.verbose) {
     fprintf(stdout, "created file: %s\n", m_fname_h5.c_str());
     fflush(::stdout);
   }
-  CHECK_NONNEG( H5Pclose(fapl), "close file properties - writer");
+  NONNEG( H5Pclose(fapl) );
 }
 
 void DaqMaster::create_all_master_groups_datasets_and_attributes() {
   DaqBase::create_standard_groups(m_master_fid);
 
-  DaqBase::create_number_groups(m_small_group, m_small_id_to_number_group, 0, m_config.small_count_all);
-  DaqBase::create_number_groups(m_vlen_group, m_vlen_id_to_number_group, 0, m_config.vlen_count_all);
+  //  DaqBase::create_number_groups(m_small_group, m_small_id_to_number_group, 0, m_config.small_count_all);
+  //DaqBase::create_number_groups(m_vlen_group, m_vlen_id_to_number_group, 0, m_config.vlen_count_all);
   DaqBase::create_number_groups(m_detector_group, m_detector_id_to_number_group, 0, m_config.detector_count_all);
 
   create_one_vds_detector_fiducials_assume_writer_layout();
@@ -306,11 +303,10 @@ void DaqMaster::create_all_master_groups_datasets_and_attributes() {
 
 void DaqMaster::create_one_vds_detector_fiducials_assume_writer_layout() {
   // create the dataset properties for the VDS
-  hid_t dcpl =  H5Pcreate (H5P_DATASET_CREATE);
-  CHECK_NONNEG(dcpl, "master vds dset prop list for one detector");
+  hid_t dcpl =  NONNEG( H5Pcreate (H5P_DATASET_CREATE) );
 
   long fill_value = -1;
-  CHECK_NONNEG( H5Pset_fill_value (dcpl, H5T_NATIVE_LONG, &fill_value), "vds one fill value");
+  NONNEG( H5Pset_fill_value (dcpl, H5T_NATIVE_LONG, &fill_value) );
 
   // select all of each writers dataset, and map it to a stride in the master vds
   std::vector<int> writer_offsets, writer_counts;
@@ -319,8 +315,7 @@ void DaqMaster::create_one_vds_detector_fiducials_assume_writer_layout() {
   
   hsize_t current_dims[1] = {(hsize_t)detector_shots};
   const int RANK1 = 1;
-  hid_t vds_space = H5Screate_simple(RANK1, current_dims, NULL);
-  CHECK_NONNEG(vds_space, "master vds space for one detector");
+  hid_t vds_space = NONNEG( H5Screate_simple(RANK1, current_dims, NULL) );
 
   if (m_config.verbose>0) {
     fprintf(stdout, "daq_master: will divide %d detector shots between %d writers into vds\n",
@@ -332,7 +327,8 @@ void DaqMaster::create_one_vds_detector_fiducials_assume_writer_layout() {
   const char * fiducials_dataset = "/detector/00000/fiducials";
   for (int writer = 0; writer < m_config.num_writers; ++writer) {
     hsize_t writer_current_dims[1] = {(hsize_t)writer_counts.at(writer)};
-    hid_t src_space = H5Screate_simple(RANK1, writer_current_dims, NULL);
+    printf("rank1=%d dims=%lld\n", RANK1, writer_current_dims[0]);
+    hid_t src_space = NONNEG( H5Screate_simple(RANK1, writer_current_dims, NULL) );
     src_spaces.push_back(src_space);
     hsize_t start[1] = {(hsize_t)writer};
     hsize_t stride[1] = {(hsize_t)m_config.num_writers};
@@ -342,31 +338,36 @@ void DaqMaster::create_one_vds_detector_fiducials_assume_writer_layout() {
                                    m_writer_fnames_h5.at(writer).c_str(), fiducials_dataset,
                                    writer_current_dims[0], start[0], stride[0], count[0]);
     
-    CHECK_NONNEG( H5Sselect_hyperslab( vds_space, H5S_SELECT_SET, start, stride, count, block ),
-                  "master - one vds - select hyperslab in master vds to correspond to a writer");
-    CHECK_NONNEG( H5Pset_virtual( dcpl,
-                                  vds_space,
-                                  m_writer_fnames_h5.at(writer).c_str(),
-                                  fiducials_dataset,
-                                  src_space ),
-                  "master - one vds set - H5Pset_virtual call to map a writer to master vds");
-    
+    NONNEG( H5Sselect_hyperslab( vds_space, H5S_SELECT_SET, start, stride, count, block ) );
+    //    NONNEG( H5Pset_virtual( dcpl, vds_space, m_writer_fnames_h5.at(writer).c_str(),
+    //                      fiducials_dataset, src_space ) );
+    if (writer == 0) {
+      NONNEG( H5Pset_virtual( dcpl, vds_space, "/reg/d/ana01/temp/davidsch/lc2/runA/a.h5",
+                              "/group1/group2/A", src_space ) );
+    } else if (writer == 1) {
+      NONNEG( H5Pset_virtual( dcpl, vds_space, "/reg/d/ana01/temp/davidsch/lc2/runA/b.h5",
+                              "/group1/group2/A", src_space ) );
+    } else if (writer == 2) {
+      NONNEG( H5Pset_virtual( dcpl, vds_space, "/reg/d/ana01/temp/davidsch/lc2/runA/c.h5",
+                              "/group1/group2/A", src_space ) );
+    }
   }
 
   //
   hid_t detGroup = m_detector_id_to_number_group.at(0);
-  hid_t dset = H5Dcreate2(detGroup, "fiducials", H5T_NATIVE_LONG, vds_space, H5P_DEFAULT,
-                          dcpl, H5P_DEFAULT);
-  CHECK_NONNEG( H5Sclose( vds_space ), "create one vds - closing vds space");
-  CHECK_NONNEG( dset, "create vds dset");  
-
-  CHECK_NONNEG( H5Pclose( dcpl ), "Create one vds - closing vds property list");
+  hsize_t start=0, stride=1, count=1, block=1;
+  NONNEG( H5Sselect_hyperslab(vds_space, H5S_SELECT_SET, &start, &stride, &count, &block) );
+  hid_t dset = NONNEG( H5Dcreate2(detGroup, "fiducials", H5T_NATIVE_LONG, vds_space, H5P_DEFAULT,
+                                  dcpl, H5P_DEFAULT) );
+  NONNEG( H5Sclose( vds_space ) );
+  NONNEG( H5Pclose( dcpl ) );
 
   for (size_t idx = 0; idx < src_spaces.size(); ++idx) {
-    CHECK_NONNEG( H5Sclose( src_spaces.at(idx) ), "master - one vds set, closing space from writer");
+    NONNEG( H5Sclose( src_spaces.at(idx) ) );
   }
 
-  CHECK_NONNEG( H5Dclose( dset ), "create one vds - closing master vds");
+  NONNEG( H5Dclose( dset ) );
+  
 }
 
 

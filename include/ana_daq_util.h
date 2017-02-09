@@ -7,11 +7,29 @@
 
 #include "hdf5.h"
 
-#define CHECK_NONNEG(x , msg) check_nonneg(x, msg, __LINE__, __FILE__)
-void check_nonneg(long long int, const char *, int, const char *);
+#define NONNEG(arg) check_nonneg(arg, #arg, __LINE__, __FILE__)
+template<class T>
+T check_nonneg(T val, const char *expression, int lineno, const char *fname) {
+  if (val < 0) {
+    static char msg[1024]; 
+    sprintf(msg, "ERROR: %lld = %s line=%d  file=%s\n", (long long int)val, expression, lineno, fname);
+    throw std::runtime_error(msg);
+  }
+  printf("%s\n" , expression );
+  fflush(stdout);
+  return val;
+}
 
-#define CHECK_POS(x , msg) check_pos(x, msg, __LINE__, __FILE__)
-void check_pos(long long int, const char *, int, const char *);
+#define POS(arg) check_pos(arg, #arg, __LINE__, __FILE__)
+template<class  T>
+T check_pos(T val, const char *expression, int lineno, const char *fname) {
+  if (val <= 0) {
+    static char msg[1024]; 
+    sprintf(msg, "ERROR: %lld = %s line=%d  file=%s\n", (long long int)val, expression, lineno, fname);
+    throw std::runtime_error(msg);
+  } 
+  return val;
+}
 
 typedef std::chrono::high_resolution_clock Clock;
 typedef std::map<int, hid_t>::const_iterator CMapIter;
