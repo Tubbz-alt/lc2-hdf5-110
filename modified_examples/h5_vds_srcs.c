@@ -48,7 +48,7 @@ long long int check_nonneg(long long int val, const char *expression, int lineno
   return val;
 }
 
-#define DIM0            6 
+#define WRITE_COUNT     6 
 #define RANK1           1
 
 const char *SRC_FILE[] = {
@@ -94,8 +94,8 @@ main (void)
 
     CHECK( H5Fstart_swmr_write( file ) );
     
-    wdata = 10 + DIM0*ii;
-    for (jj=0; jj < DIM0; ++jj) {
+    wdata = 10 + WRITE_COUNT*ii;
+    for (jj=0; jj < WRITE_COUNT; ++jj) {
       file_dest = jj;
       new_extent = jj+1;
       wdata += 1;

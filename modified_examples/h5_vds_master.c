@@ -36,98 +36,86 @@
 #include "hdf5.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdexcept>
+
+#define CHECK(arg) check_nonneg(arg, #arg, __LINE__, __FILE__)
+long long int check_nonneg(long long int val, const char *expression, int lineno, const char *fname) {
+  if (val < 0) {
+    static char msg[1024]; 
+    sprintf(msg, "ERROR: %lld = %s line=%d  file=%s\n", val, expression, lineno, fname);
+    throw std::runtime_error(msg);
+  } 
+  return val;
+}
 
 #define FILE         "/reg/d/ana01/temp/davidsch/lc2/runA/vds.h5"
 #define DATASET      "VDS"
-#define VDSDIM1         6 
-#define VDSDIM0         4 
-#define DIM0            6 
 #define RANK1           1
-#define RANK2           2
+#define NUM_SRCS        4
+#define SRC_WRITE_COUNT 6
 
-const char *SRC_FILE[] = {
+const char *SRC_FILE[NUM_SRCS] = {
     "/reg/d/ana01/temp/davidsch/lc2/runA/a.h5",
     "/reg/d/ana01/temp/davidsch/lc2/runA/b.h5",
-    "/reg/d/ana01/temp/davidsch/lc2/runA/c.h5"
+    "/reg/d/ana01/temp/davidsch/lc2/runA/c.h5",
+    "/reg/d/ana01/temp/davidsch/lc2/runA/doesnt_exist.h5"
 };
 
-const char *SRC_DATASET[] = {
+const char *SRC_DATASET[NUM_SRCS] = {
     "/group1/group2/A",
     "/group1/group2/B",
-    "/group1/group2/C"
+    "/group1/group2/C",
+    "/group1/group2/doesnt_exist",
 };
 
 int
 main (void)
 {
-    hid_t        file, space, src_space, vspace, dset, fapl; /* Handles */
-    hid_t        src_files[3];
-    hid_t        dcpl;
-    herr_t       status;
-    hsize_t      vdsdims[2] = {VDSDIM0, VDSDIM1},      /* Virtual datasets dimension */
-                 dims[1] = {DIM0},                     /* Source datasets dimensions */
-                 start[2],                             /* Hyperslab parameters */
-                 stride[2],
-                 count[2],
-                 block[2];
-    hsize_t      start_out[2],
-                 stride_out[2],
-                 count_out[2],
-                 block_out[2];
-    int          wdata[DIM0],                /* Write buffer for source dataset */
-                 rdata[VDSDIM0][VDSDIM1],    /* Read buffer for virtual dataset */
-                 i, j, k, l;  
-    int          fill_value = -1;            /* Fill value for VDS */
-    H5D_layout_t layout;                     /* Storage layout */
-    size_t       num_map;                    /* Number of mappings */
-    ssize_t      len;                        /* Length of the string; also a return value */
-    char         *filename;                  
-    char         *dsetname;
-    hsize_t      nblocks;
-    hsize_t      *buf;                       /* Buffer to hold hyperslab coordinates */
+  hid_t        fapl, file, group1, group2, dcpl, vds_space, src_space, dset; 
+  hsize_t      vds_dim = NUM_SRCS * SRC_WRITE_COUNT,
+               src_dim = SRC_WRITE_COUNT,  
+               unlimited_dim = H5S_UNLIMITED,
+               start, stride, count, block;
+                
+                 
+  int          ii, fill_value = -1;    
 
+  fapl = CHECK( H5Pcreate(H5P_FILE_ACCESS) );
+  CHECK( H5Pset_libver_bounds(fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST) );
+  file = CHECK( H5Fcreate (FILE, H5F_ACC_TRUNC, H5P_DEFAULT, fapl) );
+  CHECK( H5Pclose( fapl ) );
+  group1 = CHECK( H5Gcreate2( file, "group1", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT ) );
+  group2 = CHECK( H5Gcreate2( group1, "group2", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT ) );
 
-    /* Create file in which virtual dataset will be stored. */
-    file = H5Fcreate (FILE, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+  dcpl = H5Pcreate(H5P_DATASET_CREATE);
+  CHECK( H5Pset_fill_value (dcpl, H5T_NATIVE_INT, &fill_value) );
 
-    /* Create VDS dataspace.  */
-    space = H5Screate_simple (RANK2, vdsdims, NULL);
+  vds_space = CHECK( H5Screate_simple (RANK1, &vds_dim, NULL) );
+  src_space = CHECK( H5Screate_simple (RANK1, &src_dim, NULL) );
 
-    /* Set VDS creation property. */
-    dcpl = H5Pcreate (H5P_DATASET_CREATE);
-    status = H5Pset_fill_value (dcpl, H5T_NATIVE_INT, &fill_value);
-     
-    /* Initialize hyperslab values. */
-    start[0] = 0;
-    start[1] = 0;
-    count[0] = 1;
-    count[1] = 1;
-    block[0] = 1;
-    block[1] = VDSDIM1;
+  stride = NUM_SRCS;
+  count = SRC_WRITE_COUNT;
+  block = 1;
+  for (ii = 0; ii < NUM_SRCS; ii++) {
+    start = ii;
+    CHECK( H5Sselect_hyperslab (vds_space, H5S_SELECT_SET, &start, &stride, &count, &block) );
+    CHECK( H5Pset_virtual (dcpl, vds_space, SRC_FILE[ii], SRC_DATASET[ii], src_space) );
+    printf("ii=%d success\n", ii);
+  }
 
-    for (i=0; i <3; i++) src_files[i] = H5Fopen(SRC_FILE[i], H5F_ACC_RDONLY | H5F_ACC_SWMR_READ, H5P_DEFAULT);
-    /* 
-     * Build the mappings.
-     * Selections in the source datasets are H5S_ALL.
-     * In the virtual dataset we select the first, the second and the third rows 
-     * and map each row to the data in the corresponding source dataset. 
-     */
-    src_space = H5Screate_simple (RANK1, dims, NULL);
-    for (i = 0; i < 3; i++) {
-        start[0] = (hsize_t)i;
-        /* Select i-th row in the virtual dataset; selection in the source datasets is the same. */
-        status = H5Sselect_hyperslab (space, H5S_SELECT_SET, start, NULL, count, block);
-        status = H5Pset_virtual (dcpl, space, SRC_FILE[i], SRC_DATASET[i], src_space);
-    }
+  start=0; stride=1; count=vds_dim; block=1;
+  CHECK( H5Sselect_hyperslab( vds_space, H5S_SELECT_SET, &start, &stride, &count, &block) );
+  dset = CHECK( H5Dcreate2 (file, DATASET, H5T_NATIVE_INT, vds_space, H5P_DEFAULT, dcpl, H5P_DEFAULT) );
 
-    /* Create a virtual dataset. */
-    dset = H5Dcreate2 (file, DATASET, H5T_NATIVE_INT, space, H5P_DEFAULT,
-                dcpl, H5P_DEFAULT);
-    status = H5Sclose (space);
-    status = H5Sclose (src_space);
-    status = H5Dclose (dset);
-    status = H5Fclose (file);    
-     
-    return 0;
+  CHECK( H5Dclose( dset ) );
+  CHECK( H5Pclose( dcpl ) );
+  CHECK( H5Sclose( vds_space ) );
+  CHECK( H5Sclose( src_space ) );
+  CHECK( H5Gclose( group2 ) );
+  CHECK( H5Gclose( group1 ) );
+  CHECK( H5Fclose( file ) );
+  CHECK( H5close() );
+
+  return 0;
 }
 
