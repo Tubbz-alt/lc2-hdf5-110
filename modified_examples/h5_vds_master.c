@@ -16,32 +16,24 @@ long long int check_nonneg(long long int val, const char *expression, int lineno
 #define FILE         "/reg/d/ana01/temp/davidsch/lc2/runA/vds.h5"
 #define DATASET      "VDS"
 #define RANK1           1
-#define NUM_SRCS        4
-#define SRC_WRITE_COUNT 10 // 6
+#define NUM_SRCS        3
 
 const char *SRC_FILE[NUM_SRCS] = {
     "/reg/d/ana01/temp/davidsch/lc2/runA/a.h5",
     "/reg/d/ana01/temp/davidsch/lc2/runA/b.h5",
     "/reg/d/ana01/temp/davidsch/lc2/runA/c.h5",
-    "/reg/d/ana01/temp/davidsch/lc2/runA/doesnt_exist.h5"
 };
 
-const char *SRC_DATASET[NUM_SRCS] = {
-    "/group1/group2/A",
-    "/group1/group2/B",
-    "/group1/group2/C",
-    "/group1/group2/doesnt_exist",
-};
+hsize_t SRC_LEN[NUM_SRCS] = {4,3,3};
+
+const char *SRC_DATASET = "/group1/group2/A";
 
 int
 main (void)
 {
   hid_t        fapl, file, group1, group2, dcpl, vds_space, src_space, dset; 
-  hsize_t      vds_dim = NUM_SRCS * SRC_WRITE_COUNT,
-               src_dim = SRC_WRITE_COUNT,  
-               unlimited_dim = H5S_UNLIMITED,
+  hsize_t      vds_dim = 10,
                start, stride, count, block;
-                
                  
   int          ii, fill_value = -1;    
 
@@ -56,20 +48,20 @@ main (void)
   CHECK( H5Pset_fill_value (dcpl, H5T_NATIVE_INT, &fill_value) );
 
   vds_space = CHECK( H5Screate_simple (RANK1, &vds_dim, NULL) );
-  src_space = CHECK( H5Screate_simple (RANK1, &src_dim, NULL) );
 
   stride = NUM_SRCS;
-  count = SRC_WRITE_COUNT;
   block = 1;
   for (ii = 0; ii < NUM_SRCS; ii++) {
+    src_space = CHECK( H5Screate_simple (RANK1, &SRC_LEN[ii], NULL) );
+    count = SRC_LEN[ii];
     start = ii;
     CHECK( H5Sselect_hyperslab (vds_space, H5S_SELECT_SET, &start, &stride, &count, &block) );
-    CHECK( H5Pset_virtual (dcpl, vds_space, SRC_FILE[ii], SRC_DATASET[ii], src_space) );
+    CHECK( H5Pset_virtual (dcpl, vds_space, SRC_FILE[ii], SRC_DATASET, src_space) );
   }
 
   start=0; stride=1; count=vds_dim; block=1;
   CHECK( H5Sselect_hyperslab( vds_space, H5S_SELECT_SET, &start, &stride, &count, &block) );
-  dset = CHECK( H5Dcreate2 (file, DATASET, H5T_NATIVE_INT, vds_space, H5P_DEFAULT, dcpl, H5P_DEFAULT) );
+  dset = CHECK( H5Dcreate2 (group2, DATASET, H5T_NATIVE_INT, vds_space, H5P_DEFAULT, dcpl, H5P_DEFAULT) );
 
   CHECK( H5Dclose( dset ) );
   CHECK( H5Pclose( dcpl ) );

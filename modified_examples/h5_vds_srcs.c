@@ -13,7 +13,6 @@ long long int check_nonneg(long long int val, const char *expression, int lineno
   return val;
 }
 
-#define WRITE_COUNT     6 
 #define RANK1           1
 
 const char *SRC_FILE[] = {
@@ -22,11 +21,9 @@ const char *SRC_FILE[] = {
     "/reg/d/ana01/temp/davidsch/lc2/runA/c.h5"
 };
 
-const char *SRC_DATASET[] = {
-    "A",
-    "B",
-    "C"
-};
+const char *SRC_DATASET = "A";
+
+hsize_t SRC_LEN[] = {4,3,3};
 
 int
 main (void)
@@ -38,7 +35,8 @@ main (void)
                start0 = 0,
                count1 = 1,
                new_extent, file_dest;
-  int          wdata, ii, jj;
+  int          ii, jj;
+  long         wdata;
 
   space_write_mem = CHECK( H5Screate_simple(RANK1, &count1, &count1) );
 
@@ -52,21 +50,21 @@ main (void)
     space_create = CHECK( H5Screate_simple (RANK1, start_dims, max_dims) );
     dcpl = CHECK( H5Pcreate(H5P_DATASET_CREATE) );
     CHECK( H5Pset_chunk( dcpl, RANK1, chunk ) );
-    dset = CHECK( H5Dcreate2 (group2, SRC_DATASET[ii], H5T_NATIVE_INT, space_create, 
+    dset = CHECK( H5Dcreate2 (group2, SRC_DATASET, H5T_NATIVE_LONG, space_create, 
                               H5P_DEFAULT, dcpl, H5P_DEFAULT) );
     CHECK( H5Pclose( dcpl ) );
     CHECK( H5Sclose ( space_create ) );
     
     CHECK( H5Fstart_swmr_write( file ) );
     
-    for (jj=0; jj < WRITE_COUNT; ++jj) {
+    for (jj=0; jj < SRC_LEN[ii]; ++jj) {
       file_dest = jj;
       new_extent = jj+1;
       wdata = (10 * ii) + jj;
       CHECK( H5Dset_extent( dset, &new_extent ) );
       space_write_file = CHECK( H5Dget_space( dset ) );
       CHECK( H5Sselect_hyperslab( space_write_file, H5S_SELECT_SET, &file_dest, NULL, &count1, NULL) );
-      CHECK( H5Dwrite ( dset, H5T_NATIVE_INT, space_write_mem, space_write_file, H5P_DEFAULT, &wdata ) );
+      CHECK( H5Dwrite ( dset, H5T_NATIVE_LONG, space_write_mem, space_write_file, H5P_DEFAULT, &wdata ) );
       CHECK( H5Sclose( space_write_file ) );
       CHECK( H5Dflush ( dset ) );
     }
