@@ -8,10 +8,7 @@
 #include <vector>
 #include <map>
 
-#include "hdf5.h"
-
-#include "ana_daq_util.h"
-#include "daq_base.h"
+#include "lc2daq.h"
 
 const std::string usage("daq_writer - takes the following arguments:\n "
 "  verbose  integer verbosity level, 0,1, etc\n"

@@ -1,0 +1,249 @@
+VERSION:
+  HDF5-1.10.0-patch1
+
+USER:
+  David Schneider davidsch@slac.stanford.edu
+
+SYNOPSIS:
+  I think this bug is related to HDFFV-10127 that Barbara submitted for me today. This bug is a silent failure on creating the VDS mapping. For the file with the VDS, if I do not explicitly close one of the groups in the file, even it if is not on the path to the VDS, then the VDS mappings are ignored. The program still runs correctly, but all I see in the VDS dataset is the fill value.
+  
+MACHINE / OPERATING SYSTEM:
+
+rhel7 linux
+uname -a
+Linux psanagpu103 3.10.0-327.36.1.el7.x86_64 #1 SMP Wed Aug 17 03:02:37 EDT
+2016 x86_64 x86_64 x86_64 GNU/Linux
+
+COMPILER:
+ h5c++ --version
+g++ (GCC) 4.8.5 20150623 (Red Hat 4.8.5-11)
+Copyright (C) 2015 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions. There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+DESCRIPTION:
+
+  as in synopisis
+
+REPEAT BUG BY:
+
+Attached is a zip file, vds_close_bug.tar.gz. It will unzip to
+
+vds_close_bug/
+vds_close_bug/Makefile
+vds_close_bug/h5_vds_srcs.cpp
+vds_close_bug/h5_vds_master.cpp
+
+If you run make in that directory, it will first compile and run h5_vds_srcs.
+This will produce a.h5 b.h5 and c.h5 in your directory. These h5 files have the path
+
+/group1/group2/A
+
+a.h5 has 4 elements, while both b.h5 and c.h5 have 3 elements (10 elements total)
+
+Then the make file will compile and run h5_vds_master.
+
+This will create the file vds.h5 with the structure:
+
+  /detector                Group
+  /detector/00000          Group
+  /detector/00000/fiducials Dataset {10}
+  /small                   Group
+  /vlen                    Group
+
+/detector/00000/fiducials is programmed to be a VDS to the 10 elements in a.h5, b.h5 and c.h5.
+
+However if you inspect it, which is the last thing make does by calling h5dump, you will see it
+looks like an ordinary dataset, with just -1 for all 10 elements.
+
+If you edit the file h5_vds_master.cpp,   uncommenting line 81:
+
+    // CHECK( H5Gclose( vlen_group ) );
+
+so that this group gets closed, and then re-run make, you will find that the fiducials dataset
+is a correct VDS.
+ 
+
+For reference, here are the files in the zip:
+################## Makefile ################
+h5vdsmod: h5_vds_srcs.cpp h5_vds_master.cpp
+	h5c++ h5_vds_srcs.cpp -o h5_vds_srcs
+	h5c++ h5_vds_master.cpp -o h5_vds_master
+	./h5_vds_srcs
+	./h5_vds_master
+	h5dump -p vds.h5
+
+############ h5_vds_srcs.cpp ###############
+  
+#include "hdf5.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdexcept>
+
+#define CHECK(arg) check_nonneg(arg, #arg, __LINE__, __FILE__)
+long long int check_nonneg(long long int val, const char *expression, int lineno, const char *fname) {
+  if (val < 0) {
+    static char msg[1024]; 
+    sprintf(msg, "ERROR: %lld = %s line=%d  file=%s\n", val, expression, lineno, fname);
+    throw std::runtime_error(msg);
+  } 
+  return val;
+}
+
+#define RANK1           1
+
+const char *SRC_FILE[] = {
+    "a.h5",
+    "b.h5",
+    "c.h5"
+};
+
+const char *SRC_DATASET = "A";
+
+hsize_t SRC_LEN[] = {4,3,3};
+
+int
+main (void)
+{
+  hid_t        fapl, file, group1, group2, space_create, dcpl, dset, space_write_file, space_write_mem;
+  hsize_t      start_dims[1] = {0},
+               max_dims[1] = {H5S_UNLIMITED},
+               chunk[1] = {4},
+               start0 = 0,
+               count1 = 1,
+               new_extent, file_dest;
+  int          ii, jj;
+  long         wdata;
+
+  space_write_mem = CHECK( H5Screate_simple(RANK1, &count1, &count1) );
+
+  for (ii=0; ii < 3; ii++) {
+    fapl = CHECK( H5Pcreate(H5P_FILE_ACCESS) );
+    CHECK( H5Pset_libver_bounds(fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST) );
+    file = CHECK( H5Fcreate (SRC_FILE[ii], H5F_ACC_TRUNC, H5P_DEFAULT, fapl) );
+    CHECK( H5Pclose( fapl ) );
+    group1 = CHECK( H5Gcreate2(file, "group1", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT) );
+    group2 = CHECK( H5Gcreate2(group1, "group2", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT) );
+    space_create = CHECK( H5Screate_simple (RANK1, start_dims, max_dims) );
+    dcpl = CHECK( H5Pcreate(H5P_DATASET_CREATE) );
+    CHECK( H5Pset_chunk( dcpl, RANK1, chunk ) );
+    dset = CHECK( H5Dcreate2 (group2, SRC_DATASET, H5T_NATIVE_LONG, space_create, 
+                              H5P_DEFAULT, dcpl, H5P_DEFAULT) );
+    CHECK( H5Pclose( dcpl ) );
+    CHECK( H5Sclose ( space_create ) );
+    
+    CHECK( H5Fstart_swmr_write( file ) );
+    
+    for (jj=0; jj < SRC_LEN[ii]; ++jj) {
+      file_dest = jj;
+      new_extent = jj+1;
+      wdata = (10 * ii) + jj;
+      CHECK( H5Dset_extent( dset, &new_extent ) );
+      space_write_file = CHECK( H5Dget_space( dset ) );
+      CHECK( H5Sselect_hyperslab( space_write_file, H5S_SELECT_SET, &file_dest, NULL, &count1, NULL) );
+      CHECK( H5Dwrite ( dset, H5T_NATIVE_LONG, space_write_mem, space_write_file, H5P_DEFAULT, &wdata ) );
+      CHECK( H5Sclose( space_write_file ) );
+      CHECK( H5Dflush ( dset ) );
+    }
+
+    CHECK( H5Dclose ( dset ) );
+    CHECK( H5Gclose( group2 ) );
+    CHECK( H5Gclose( group1 ) );
+    CHECK( H5Fclose ( file ) );
+  }
+  CHECK( H5Sclose( space_write_mem ) );
+  CHECK( H5close() );
+  return 0;
+}
+
+################### h5_vds_master.cpp ######################
+
+#include "hdf5.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdexcept>
+#include <vector>
+
+#define CHECK(arg) check_nonneg(arg, #arg, __LINE__, __FILE__)
+long long int check_nonneg(long long int val, const char *expression, int lineno, const char *fname) {
+  if (val < 0) {
+    static char msg[1024]; 
+    sprintf(msg, "ERROR: %lld = %s line=%d  file=%s\n", val, expression, lineno, fname);
+    throw std::runtime_error(msg);
+  }
+  printf("%s\n", expression);
+  return val;
+}
+
+#define FILE         "vds.h5"
+#define RANK1           1
+#define NUM_SRCS        3
+
+const char *SRC_FILE[NUM_SRCS] = {
+    "a.h5",
+    "b.h5",
+    "c.h5",
+};
+
+hsize_t SRC_LEN[NUM_SRCS] = {4,3,3};
+
+const char *SRC_DATASET = "/group1/group2/A";
+
+int
+main (int argc, char *argv[])
+{
+  hid_t        fapl, file, dcpl, vds_space, src_space, dset; 
+  hsize_t      vds_dim = 10,
+               start, stride, count, block;
+                 
+  int          ii;
+
+  H5open();
+  fapl = CHECK( H5Pcreate(H5P_FILE_ACCESS) );
+  CHECK( H5Pset_libver_bounds(fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST) );
+  file = CHECK( H5Fcreate (FILE, H5F_ACC_TRUNC, H5P_DEFAULT, fapl) );
+  CHECK( H5Pclose( fapl ) );
+  hid_t small_group = CHECK( H5Gcreate2(file, "small", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT) );  
+  hid_t vlen_group = CHECK( H5Gcreate2(file, "vlen", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT) );  
+  hid_t detector_group = CHECK( H5Gcreate2(file, "detector", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT) );  
+  hid_t group2 = CHECK( H5Gcreate2( detector_group, "00000", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT ) );
+
+  dcpl = CHECK( H5Pcreate(H5P_DATASET_CREATE) );
+  long fill_value = -1;
+  CHECK( H5Pset_fill_value (dcpl, H5T_NATIVE_LONG, &fill_value) );
+
+  vds_space = CHECK( H5Screate_simple (RANK1, &vds_dim, NULL) );
+
+  stride = NUM_SRCS;
+  block = 1;
+  std::vector<hid_t> spaces;
+  for (ii = 0; ii < NUM_SRCS; ii++) {
+    src_space = CHECK( H5Screate_simple (RANK1, &SRC_LEN[ii], NULL) );
+    spaces.push_back(src_space);
+    count = SRC_LEN[ii];
+    start = ii;
+    CHECK( H5Sselect_hyperslab (vds_space, H5S_SELECT_SET, &start, &stride, &count, &block) );
+    CHECK( H5Pset_virtual (dcpl, vds_space, SRC_FILE[ii], SRC_DATASET, src_space) );
+  }
+
+  start=0; stride=1; count=vds_dim; block=1;
+  CHECK( H5Sselect_hyperslab( vds_space, H5S_SELECT_SET, &start, &stride, &count, &block) );
+  dset = CHECK( H5Dcreate2 (group2, "fiducials", H5T_NATIVE_INT, vds_space, H5P_DEFAULT, dcpl, H5P_DEFAULT) );
+
+  CHECK( H5Sclose( vds_space ) );
+  CHECK( H5Pclose( dcpl ) );
+  CHECK( H5Sclose( spaces.at(0) ) );
+  CHECK( H5Sclose( spaces.at(1) ) );
+  CHECK( H5Sclose( spaces.at(2) ) );
+  CHECK( H5Dclose( dset ) );
+  CHECK( H5Gclose( small_group ) );
+
+  // CHECK( H5Gclose( vlen_group ) );
+  CHECK( H5Gclose( detector_group ) );
+  CHECK( H5Gclose( group2 ) );
+  CHECK( H5Fclose( file ) );
+  CHECK( H5close() );
+
+  return 0;
+}
+

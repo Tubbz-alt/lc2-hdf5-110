@@ -36,8 +36,8 @@ class DaqBase {
   hid_t m_small_group, m_vlen_group, m_detector_group;
 
   std::map<int, hid_t> m_small_id_to_number_group,
-    m_vlen_id_to_number_group,
-    m_detector_id_to_number_group;
+                       m_vlen_id_to_number_group,
+                       m_detector_id_to_number_group;
 
   std::chrono::time_point<Clock> m_t0, m_t1;
   
@@ -48,7 +48,9 @@ class DaqBase {
 
   void create_standard_groups(hid_t parent);
   void create_number_groups(hid_t parent, std::map<int, hid_t> &name_to_group, int first, int count);
-
+  void close_number_groups(std::map<int, hid_t> &name_to_group);
+  void close_standard_groups();
+  
   static hid_t get_dataset(hid_t fid_parent, const char *group1, int group2, const char *dsetname);
   
  public:
@@ -59,4 +61,4 @@ class DaqBase {
 
 };
 
-#endif
+#endif // DAQ_BASE_HH

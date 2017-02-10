@@ -1,5 +1,5 @@
-#ifndef LC2DAQ_HH
-#define LC2DAQ_HH
+#ifndef ANA_DAQ_UTIL_HH
+#define ANA_DAQ_UTIL_HH
 
 #include <cstdio>
 #include <vector>
@@ -55,4 +55,4 @@ int foo();
 
 void linedump_vector(FILE *fout, const char *hdr, const std::vector<int> &data);
 int read_args(std::vector<int> &to_fill, int num, char *argv[], int start_at);
-#endif // LC2DAQ_HH
+#endif // ANA_DAQ_UTIL_HH

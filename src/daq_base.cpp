@@ -71,6 +71,20 @@ void DaqBase::create_number_groups(hid_t parent, std::map<int, hid_t> &name_to_g
 }
 
 
+void DaqBase::close_number_groups(std::map<int, hid_t> &name_to_group) {
+  std::map<int, hid_t>::iterator pos;
+  for (pos = name_to_group.begin(); pos != name_to_group.end(); ++pos) {
+    NONNEG( H5Gclose( pos->second ) );
+  }
+  name_to_group.clear();
+}
+
+void DaqBase::close_standard_groups() {
+  NONNEG( H5Gclose( m_detector_group ) );
+  NONNEG( H5Gclose( m_vlen_group ) );
+  NONNEG( H5Gclose( m_small_group ) );
+}
+  
 hid_t DaqBase::get_dataset(hid_t fid, const char *group1, int group2, const char *dsetname) {
   hid_t gid_group1 = NONNEG( H5Gopen2(fid, group1, H5P_DEFAULT) );
 

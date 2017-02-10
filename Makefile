@@ -6,7 +6,7 @@ LDFLAGS=-L$(PREFIX)/lib -Llib -Wl,--enable-new-dtags -Wl,-rpath='$$ORIGIN:$$ORIG
 
 .PHONY: all clean
 
-all: lib/libana_daq_util.so bin/daq_writer bin/daq_master bin/ana_reader_master bin/ana_reader_stream bin/ana_daq_driver
+all: lib/liblc2daq.so bin/daq_writer bin/daq_master bin/ana_reader_master bin/ana_reader_stream bin/ana_daq_driver
 
 h5vds: examples/h5_vds.c
 	h5c++ examples/h5_vds.c -o h5_vds
@@ -31,43 +31,48 @@ bin/ana_daq_driver:
 	chmod a+x bin/ana_daq_driver
 
 #### LIB
-lib/libana_daq_util.so: build/ana_daq_util.o build/daq_base.o
-	$(CC) -shared $(LDFLAGS) build/ana_daq_util.o build/daq_base.o -o $@
+lib/liblc2daq.so: build/ana_daq_util.o build/daq_base.o build/H5OpenObjects.o include/lc2daq.h
+	$(CC) -shared $(LDFLAGS) build/ana_daq_util.o build/daq_base.o build/H5OpenObjects.o -o $@
 
 build/ana_daq_util.o: src/ana_daq_util.cpp include/ana_daq_util.h
-	$(CC) $(CFLAGS) $< -o $@
+	$(CC) $(CFLAGS) src/ana_daq_util.cpp -o build/ana_daq_util.o
+
+build/H5OpenObjects.o: src/H5OpenObjects.cpp include/H5OpenObjects.h
+	$(CC) $(CFLAGS) src/H5OpenObjects.cpp -o build/H5OpenObjects.o
 
 build/daq_base.o: src/daq_base.cpp include/daq_base.h
-	$(CC) $(CFLAGS) $< -o $@
+	$(CC) $(CFLAGS) src/daq_base.cpp -o build/daq_base.o
 
 include/ana_daq_util.h:
 
 include/daq_base.h:
 
-#### DAQ STREAM WRITER
-bin/daq_writer: build/daq_writer.o lib/libana_daq_util.so
-	$(CC) $(LDFLAGS) -lana_daq_util $< -o $@
+include/lc2daq.h:
 
-build/daq_writer.o: src/daq_writer.cpp
+#### DAQ WRITER RAW/STREAM
+bin/daq_writer: build/daq_writer.o lib/liblc2daq.so
+	$(CC) $(LDFLAGS) -llc2daq $< -o $@
+
+build/daq_writer.o: src/daq_writer.cpp 
 	$(CC) $(CFLAGS) $< -o $@
 
 #### DAQ MASTER
-bin/daq_master: build/daq_master.o lib/libana_daq_util.so
-	$(CC) $(LDFLAGS) -lana_daq_util $< -o $@
+bin/daq_master: build/daq_master.o lib/liblc2daq.so
+	$(CC) $(LDFLAGS) -llc2daq $< -o $@
 
 build/daq_master.o: src/daq_master.cpp
 	$(CC) $(CFLAGS)  $< -o $@
 
 #### ANA READ MASTER
-bin/ana_reader_master: build/ana_reader_master.o lib/libana_daq_util.so
-	$(CC) $(LDFLAGS) -lana_daq_util $< -o $@
+bin/ana_reader_master: build/ana_reader_master.o lib/liblc2daq.so
+	$(CC) $(LDFLAGS) -llc2daq $< -o $@
 
 build/ana_reader_master.o: src/ana_reader_master.cpp
 	$(CC) $(CFLAGS) $< -o $@
 
 #### ANA READ STREAM
-bin/ana_reader_stream: build/ana_reader_stream.o lib/libana_daq_util.so
-	$(CC) $(LDFLAGS) -lana_daq_util $< -o $@
+bin/ana_reader_stream: build/ana_reader_stream.o lib/liblc2daq.so
+	$(CC) $(LDFLAGS) -llc2daq $< -o $@
 
 build/ana_reader_stream.o: src/ana_reader_stream.cpp
 	$(CC) $(CFLAGS) $< -o $@
@@ -82,5 +87,5 @@ test:
 
 #### clean
 clean:
-	rm lib/libana_daq_util.so build/*.o bin/daq_writer bin/daq_master bin/ana_reader_master bin/ana_reader_stream bin/ana_daq_driver
+	rm lib/liblc2daq.so build/*.o bin/daq_writer bin/daq_master bin/ana_reader_master bin/ana_reader_stream bin/ana_daq_driver
 

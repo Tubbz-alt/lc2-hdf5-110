@@ -144,7 +144,7 @@ main (void)
 
     /* Create a virtual dataset. */
     dset = H5Dcreate2 (file, DATASET, H5T_NATIVE_INT, space, H5P_DEFAULT,
-                dcpl, H5P_DEFAULT);
+                       dcpl, H5P_DEFAULT);
     status = H5Sclose (space);
     status = H5Sclose (src_space);
     status = H5Dclose (dset);
