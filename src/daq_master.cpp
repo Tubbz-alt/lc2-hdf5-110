@@ -328,7 +328,7 @@ void DaqMaster::create_one_vds_detector_fiducials_assume_writer_layout() {
   int detector_shots = m_config.num_shots / m_config.detector_stride_all;
   
   hsize_t current_dims[1] = {(hsize_t)detector_shots};
-  const int RANK1 = 1;
+  const int RANK1 = 1;              // TODO: make this unlimited, for both current and max
   hid_t vds_space = NONNEG( H5Screate_simple(RANK1, current_dims, NULL) );
 
   if (m_config.verbose>0) {
@@ -340,6 +340,8 @@ void DaqMaster::create_one_vds_detector_fiducials_assume_writer_layout() {
   const char * fiducials_dataset = "/detector/00000/fiducials";
   for (int writer = 0; writer < m_config.num_writers; ++writer) {
     hsize_t writer_current_dims[1] = {(hsize_t)writer_counts.at(writer)};
+                                                      // again, put in unlimited, should default to select all 
+                                                      // otherwise, select all
     hid_t src_space = NONNEG( H5Screate_simple(RANK1, writer_current_dims, NULL) );
     hsize_t start[1] = {(hsize_t)writer};
     hsize_t stride[1] = {(hsize_t)m_config.num_writers};
@@ -348,7 +350,7 @@ void DaqMaster::create_one_vds_detector_fiducials_assume_writer_layout() {
     if (m_config.verbose>0) printf("daq_master: mapping %s%s with %Ld elements to start=%Ld stride=%Ld count=%Ld in vds\n",
                                    m_writer_fnames_h5.at(writer).c_str(), fiducials_dataset,
                                    writer_current_dims[0], start[0], stride[0], count[0]);
-    
+                                                                        // the count is unlimited
     NONNEG( H5Sselect_hyperslab( vds_space, H5S_SELECT_SET, start, stride, count, block ) );
     NONNEG( H5Pset_virtual( dcpl, vds_space, m_writer_fnames_h5.at(writer).c_str(),
                             fiducials_dataset, src_space ) );
