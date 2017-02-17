@@ -6,7 +6,7 @@ LDFLAGS=-L$(PREFIX)/lib -Llib -Wl,--enable-new-dtags -Wl,-rpath='$$ORIGIN:$$ORIG
 
 .PHONY: all clean
 
-all: lib/liblc2daq.so bin/daq_writer bin/daq_master bin/ana_reader_master bin/ana_reader_stream bin/ana_daq_driver
+all: bin/event_writer lib/liblc2daq.so bin/daq_writer bin/daq_master bin/ana_reader_master bin/ana_reader_stream bin/ana_daq_driver
 
 h5vds: examples/h5_vds.c
 	h5c++ examples/h5_vds.c -o h5_vds
@@ -75,6 +75,13 @@ bin/ana_reader_stream: build/ana_reader_stream.o lib/liblc2daq.so
 	$(CC) $(LDFLAGS) -llc2daq $< -o $@
 
 build/ana_reader_stream.o: src/ana_reader_stream.cpp
+	$(CC) $(CFLAGS) $< -o $@
+
+#### EVENT BASED INSTEAD OF ARRAY BASED
+bin/event_writer: build/event_writer.o lib/liblc2daq.so
+	$(CC) $(LDFLAGS) -llc2daq build/event_writer.o -o bin/event_writer
+
+build/event_writer.o: src/event_writer.cpp
 	$(CC) $(CFLAGS) $< -o $@
 
 ######### test

@@ -348,7 +348,7 @@ void DaqWriter::create_vlen_blob_and_index_dsets() {
 void DaqWriter::start_SWMR_access_to_file() {
   NONNEG( H5Fstart_swmr_write(m_writer_fid) );
   if (m_config.verbose) {
-    printf("started SWMR access\n");
+    printf("started SWMR access to writer file\n");
     fflush(::stdout);
   }
 };

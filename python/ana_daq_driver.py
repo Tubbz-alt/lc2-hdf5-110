@@ -448,8 +448,10 @@ def run(argv):
         return
         
     daq_writer_hosts = assign_hosts('daq_writer', config)
+    daq_master_hosts = assign_hosts('daq_master', config)
 
     jobs.launch('daq_writer', daq_writer_commands, daq_writer_hosts)
+    jobs.launch('daq_master', daq_master_commands, daq_master_hosts)
     time.sleep(1)
     jobs.wait()
 
