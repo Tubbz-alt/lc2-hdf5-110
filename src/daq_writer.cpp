@@ -8,48 +8,18 @@
 #include <vector>
 #include <map>
 
+#include "yaml-cpp/yaml.h"
 #include "lc2daq.h"
 
 const std::string usage("daq_writer - takes the following arguments:\n "
-"  verbose  integer verbosity level, 0,1, etc\n"
-"  rundir   string, the output directory\n"
+"  config.yaml  string  name of the config.yaml file\n"
 "  group    string, this processes group\n"                        
 "  id       int,    this processes id within that group\n"
-
-"  num_shots     int, how many shots will the DAQ write in this run\n"
-
-"  small_name_first     int, first small dataset to write\n"
-"  vlen_name_first      int, first vlen dataset to write\n"
-"  detector_name_first  int, first detector dataset to write\n"
-
-"  small_count     int, count of small datasets to write\n"
-"  vlen_count      int, count of vlen datasets to write\n"
-"  detector_count  int, count of detector datasets to write\n"
-
-"  small_shot_first   int, which shot, in the global timing counter for all writers, to start writing small datasets\n"
-"  vlen_shot_first   int, which shot, in the global timing counter for all writers, to start writing vlen datasets\n"
-"  detector_shot_first   int, which shot, in the global timing counter for all writers, to start writing detector datasets\n"
-
-"  small_shot_stride   int, which shot, in the global timing counter for all writers, to stride writing small datasets\n"
-"  vlen_shot_stride   int, which shot, in the global timing counter for all writers, to stride writing vlen datasets\n"
-"  detector_shot_stride   int, which shot, in the global timing counter for all writers, to stride writing detector datasets\n"
-
-"  small_chunksize     int, number of elements in a small\n"
-"  vlen_chunksize      int, number of elements in a vlen\n"
-"  detector_chunksize  int, number of elements in a detector chunk\n"
-
-"  vlen_min_per_shot int\n"
-"  vlen_max_per_shot  int\n"
-
-"  detector_rows\n"
-"  detector_columns\n"
-
-"  flush_interval  how many fiducials between flushes\n"
-
-"  writers_hang   have writers hang when done, for debugging process control\n"
 "\n");
 
 struct DaqWriterConfig : DaqBaseConfig {
+  std::string config_filename;
+  
   int small_name_first;
   int vlen_name_first;
   int detector_name_first;
@@ -69,7 +39,7 @@ struct DaqWriterConfig : DaqBaseConfig {
   int vlen_min_per_shot;
   int vlen_max_per_shot;
 
-  static const int num_args = 26;
+  static const int num_args = 3;
   
   void dump(FILE *fout);
   bool parse_command_line(int argc, char *argv[], const std::string &usage);
@@ -113,32 +83,17 @@ bool DaqWriterConfig::parse_command_line(int argc, char *argv[], const std::stri
     return false;
   }
   int idx = 1;
-  verbose = atoi(argv[idx++]);
-  rundir = std::string(argv[idx++]);
+  config_filename = std::string(argv[idx++]);
   group = std::string(argv[idx++]);
   id = atoi(argv[idx++]);
-  num_shots = atol(argv[idx++]);
-  small_name_first = atoi(argv[idx++]);
-  vlen_name_first = atoi(argv[idx++]);
-  detector_name_first = atoi(argv[idx++]);
-  small_count = atoi(argv[idx++]);
-  vlen_count = atoi(argv[idx++]);
-  detector_count = atoi(argv[idx++]);
-  small_shot_first = atoi(argv[idx++]);
-  vlen_shot_first = atoi(argv[idx++]);
-  detector_shot_first = atoi(argv[idx++]);
-  small_shot_stride = atoi(argv[idx++]);
-  vlen_shot_stride = atoi(argv[idx++]);
-  detector_shot_stride = atoi(argv[idx++]);
-  small_chunksize = atoi(argv[idx++]);
-  vlen_chunksize = atoi(argv[idx++]);
-  detector_chunksize = atoi(argv[idx++]);
-  vlen_min_per_shot = atoi(argv[idx++]);
-  vlen_max_per_shot = atoi(argv[idx++]);
-  detector_rows = atoi(argv[idx++]);
-  detector_columns = atoi(argv[idx++]);
-  flush_interval = atoi(argv[idx++]);
-  hang = atoi(argv[idx++]);
+
+  YAML::Node config = YAML::LoadFile(config_filename.c_str());
+  rundir = config["rundir"].as<std::string>();
+  verbose = config["verbose"].as<int>();
+  num_shots = config["num_samples"].as<int>();
+  small_chunksize = (((config["daq_writer"])["datasets"])["smal"])["chunksize"].as<int>();
+  
+  //  divide_evenly
   return true;
 }
 

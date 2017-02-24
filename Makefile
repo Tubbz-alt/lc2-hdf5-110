@@ -51,35 +51,35 @@ include/lc2daq.h:
 
 #### DAQ WRITER RAW/STREAM
 bin/daq_writer: build/daq_writer.o lib/liblc2daq.so
-	$(CC) $(LDFLAGS) -llc2daq $< -o $@
+	$(CC) $(LDFLAGS) -llc2daq -lyaml-cpp $< -o $@
 
 build/daq_writer.o: src/daq_writer.cpp 
 	$(CC) $(CFLAGS) $< -o $@
 
 #### DAQ MASTER
 bin/daq_master: build/daq_master.o lib/liblc2daq.so
-	$(CC) $(LDFLAGS) -llc2daq $< -o $@
+	$(CC) $(LDFLAGS) -llc2daq  -lyaml-cpp $< -o $@
 
 build/daq_master.o: src/daq_master.cpp
 	$(CC) $(CFLAGS)  $< -o $@
 
 #### ANA READ MASTER
 bin/ana_reader_master: build/ana_reader_master.o lib/liblc2daq.so
-	$(CC) $(LDFLAGS) -llc2daq $< -o $@
+	$(CC) $(LDFLAGS) -llc2daq -lyaml-cpp $< -o $@
 
 build/ana_reader_master.o: src/ana_reader_master.cpp
 	$(CC) $(CFLAGS) $< -o $@
 
 #### ANA READ STREAM
 bin/ana_reader_stream: build/ana_reader_stream.o lib/liblc2daq.so
-	$(CC) $(LDFLAGS) -llc2daq $< -o $@
+	$(CC) $(LDFLAGS) -llc2daq  -lyaml-cpp $< -o $@
 
 build/ana_reader_stream.o: src/ana_reader_stream.cpp
 	$(CC) $(CFLAGS) $< -o $@
 
 #### EVENT BASED INSTEAD OF ARRAY BASED
 bin/event_writer: build/event_writer.o lib/liblc2daq.so
-	$(CC) $(LDFLAGS) -llc2daq build/event_writer.o -o bin/event_writer
+	$(CC) $(LDFLAGS) -llc2daq  -lyaml-cpp build/event_writer.o -o bin/event_writer
 
 build/event_writer.o: src/event_writer.cpp
 	$(CC) $(CFLAGS) $< -o $@
