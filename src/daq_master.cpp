@@ -7,201 +7,31 @@
 
 #include "lc2daq.h"
 
-const std::string usage("daq_master - takes the following arguments:\n "
-"  verbose  integer verbosity level, 0,1, etc\n"
-"  rundir   string, the output directory\n"
-"  group    string, this processes group (should be daq_master)\n"                        
-"  id       int,    this processes id within that group\n"
-
-"  writer_group    string, the daq_writer group name (should be daq_writer)\n"                        
-"  num_writers     the number of daq writers\n"
-"  num_shots       int, how many shots will the DAQ write in this run\n"
-
-"  small_count     number of small datasets between all writers\n"
-"  vlen_count      number of vlen datasets between all writers\n"
-"  detector_count  number of detector datasets between all writers\n"
-
-"  small_chunksize     int, number of elements in a small\n"
-"  vlen_chunksize      int, number of elements in a vlen\n"
-"  detector_chunksize  int, number of elements in a detector chunk\n"
-
-"  detector_rows\n"
-"  detector_columns\n"
-
-"  flush_interval  how many fiducials between flushes\n"
-
-"  masters_hang   have masters hang when done, for debugging process control\n"
-
-"  small_name_first_0 small_name_first_1 ... small_name_first_k  ints, starting name for smalls, one for each writer\n"                        
-"  small_shot_first_0 small_shot_first_1 ... small_shot_first_k  ints, starting shot for smalls, one for each writer\n"                        
-"  small_shot_stride_0 small_shot_stride_1 ... small_shot_stridek  ints, stride for smalls, one for each writer\n"                        
-
-"  vlen_name_first_0 vlen_name_first_1 ... vlen_name_first_k  ints, firsting name for vlens, one for each writer\n"                        
-"  vlen_shot_first_0 vlen_shot_first_1 ... vlen_shot_first_k  ints, starting shot for vlens, one for each writer\n"                        
-"  vlen_shot_stride_0 vlen_shot_stride_1 ... vlen_shot_stridek  ints, stride for vlens, one for each writer\n"                        
-
-"  detector_name_first_0 detector_name_first_1 ... detector_name_first_k  ints, starting name for detectors, one for each writer\n"                        
-"  detector_shot_first_0 detector_shot_first_1 ... detector_shot_first_k  ints, starting shot for detectors, one for each writer\n"                        
-"  detector_shot_stride_0 detector_shot_stride_1 ... detector_shot_stridek  ints, stride for detectors, one for each writer\n"                        
-);
-
-
-struct DaqMasterConfig : DaqBaseConfig {
-  std::string writer_group;
-  int num_writers;
-
-  std::vector<int> small_name_first, vlen_name_first, detector_name_first;
-  std::vector<int> small_count, vlen_count, detector_count;
-  std::vector<int> small_shot_first, vlen_shot_first, detector_shot_first;
-  std::vector<int> small_shot_stride, vlen_shot_stride, detector_shot_stride;
-
-  // will be derived from other arguments
-  int small_count_all;
-  int vlen_count_all;
-  int detector_count_all;
-
-  // each writer has a longer stride, but between all writers the
-  // stride is shorter
-  int detector_stride_all;
-  
-  void dump(FILE *fout);
-  bool parse_command_line(int argc, char *argv[], const std::string &usage);
-};
-
-
-void DaqMasterConfig::dump(FILE *fout) {
-  fprintf(fout, "DaqMasterConfig\n");
-  fprintf(fout, "    verbose=%d\n", verbose);
-  fprintf(fout, "    rundir=%s\n", rundir.c_str());
-  fprintf(fout, "    group=%s\n", group.c_str());
-  fprintf(fout, "    id=%d\n", id);
-
-  fprintf(fout, "    num_shots=%ld\n", num_shots);
-
-  fprintf(fout, "    small_chunksize=%d\n", small_chunksize);
-  fprintf(fout, "    vlen_chunksize=%d\n", vlen_chunksize);
-  fprintf(fout, "    detector_chunksize=%d\n", detector_chunksize);
-
-  fprintf(fout, "    detector_rows=%d\n", detector_rows);
-  fprintf(fout, "    detector_columns=%d\n", detector_columns);
-
-  fprintf(fout, "    flush_interval=%d\n", flush_interval);
-  fprintf(fout, "    hang=%d\n", hang);
-
-  fprintf(fout, "    writer_group=%s\n", writer_group.c_str());
-  fprintf(fout, "    num_writers=%d\n", num_writers);
-
-  linedump_vector(fout, "small_name_first", small_name_first);
-  linedump_vector(fout, "vlen_name_first", vlen_name_first);
-  linedump_vector(fout, "detector_name_first", detector_name_first);
-  linedump_vector(fout, "small_count", small_count);
-  linedump_vector(fout, "vlen_count", vlen_count);
-  linedump_vector(fout, "detector_count", detector_count);
-  linedump_vector(fout, "small_shot_first", small_shot_first);
-  linedump_vector(fout, "vlen_shot_first", vlen_shot_first);
-  linedump_vector(fout, "detector_shot_first", detector_shot_first);
-  linedump_vector(fout, "small_shot_stride", small_shot_stride);
-  linedump_vector(fout, "vlen_shot_stride", vlen_shot_stride);
-  linedump_vector(fout, "detector_shot_stride", detector_shot_stride);
-  
-  fprintf(fout, "    small_count_all=%d\n", small_count_all);
-  fprintf(fout, "    vlen_count_all=%d\n", vlen_count_all);
-  fprintf(fout, "    detector_count_all=%d\n", detector_count_all);
-  fflush(fout);
-}
-
-
-bool DaqMasterConfig::parse_command_line(int argc, char *argv[], const std::string &usage) {
-  if (argc < 15) {
-    std::cerr << "ERROR: need at least 15 command line arguments, " << std::endl;
-    std::cerr << usage << std::endl;
-    return false;
-  }
-  int idx = 1;
-  verbose = atoi(argv[idx++]);
-  rundir = std::string(argv[idx++]);
-  group = std::string(argv[idx++]);
-  id = atoi(argv[idx++]);
-
-  num_shots = atol(argv[idx++]);
-
-  small_chunksize = atoi(argv[idx++]);
-  vlen_chunksize = atoi(argv[idx++]);
-  detector_chunksize = atoi(argv[idx++]);
-
-  detector_rows = atoi(argv[idx++]);
-  detector_columns = atoi(argv[idx++]);
-  flush_interval = atoi(argv[idx++]);
-  hang = atoi(argv[idx++]);
-
-  writer_group = std::string(argv[idx++]);
-  num_writers = atoi(argv[idx++]);
-
-  argc -= 15;
-  int args_left = num_writers * 12;
-
-  if (argc != args_left) {
-    std::cerr << "ERROR: read first 15 arguments, which specified " <<
-      num_writers << " num_writers. Need " << args_left <<
-      " more arguments, but there are " << argc << std::endl;
-    return false;
-  }
-
-  idx = read_args(small_name_first, num_writers, argv, idx);
-  idx = read_args(vlen_name_first, num_writers, argv, idx);
-  idx = read_args(detector_name_first, num_writers, argv, idx);
-  idx = read_args(small_count, num_writers, argv, idx);
-  idx = read_args(vlen_count, num_writers, argv, idx);
-  idx = read_args(detector_count, num_writers, argv, idx);
-  idx = read_args(small_shot_first, num_writers, argv, idx);
-  idx = read_args(vlen_shot_first, num_writers, argv, idx);
-  idx = read_args(detector_shot_first, num_writers, argv, idx);
-  idx = read_args(small_shot_stride, num_writers, argv, idx);
-  idx = read_args(vlen_shot_stride, num_writers, argv, idx);
-  idx = read_args(detector_shot_stride, num_writers, argv, idx);
-  
-  small_count_all = std::accumulate(small_count.begin(), small_count.end(), 0);
-  vlen_count_all = std::accumulate(vlen_count.begin(), vlen_count.end(), 0);
-  
-  // check for one detector, but multiple small and vlen
-  std::set<int> unique_small(small_name_first.begin(), small_name_first.end());
-  if (unique_small.size() != small_name_first.size()) {
-    throw std::runtime_error("FATAL: daq_master assumes more small datasets than daq_writers");
-  }
-
-  std::set<int> unique_vlen(vlen_name_first.begin(), vlen_name_first.end());
-  if (unique_vlen.size() != vlen_name_first.size()) {
-    throw std::runtime_error("FATAL: daq_master assumes more small datasets than daq_writers");
-  }
-
-  std::set<int> unique_det(detector_name_first.begin(), detector_name_first.end());
-  if (unique_det.size() != 1) {
-    throw std::runtime_error("FATAL: daq_master assumes only one dectetor spread among writers");
-  }
-  detector_count_all = 1;
-
-  std::set<int> unique_det_stride(detector_shot_stride.begin(), detector_shot_stride.end());
-  if (unique_det_stride.size() != 1) {
-    throw std::runtime_error("FATAL: daq_master assumes only value for detector strides");
-  }
-  detector_stride_all = detector_shot_stride.at(0) / num_writers;
-  if (detector_shot_stride.at(0) % num_writers != 0) {
-    throw std::runtime_error("FATAL: daq_master assumes writer det stride is exact multiple of num_writers");
-  }
-  return true;
-  
-}
-
 
 class DaqMaster : public DaqBase {
-  DaqMasterConfig m_config;
-  std::vector<std::string> m_writer_basenames, m_writer_fnames_h5;
-  std::vector<hid_t> m_writer_h5;
-  std::string m_master_fname;
+  int m_num_writers;
+  int m_small_num_per_writer;
+  int m_vlen_num_per_writer;
+  int m_cspad_num;
+  int m_small_count_all;
+  int m_vlen_count_all;
+  int m_cspad_stride_all;
   hid_t m_master_fid;
   
+  std::vector<int> m_small_name_first, m_vlen_name_first;
+  std::vector<int> m_small_count, m_vlen_count;
+
+  std::vector<std::string> m_writer_basenames, m_writer_fnames_h5;
+  std::vector<hid_t> m_writer_h5;
+  
+  std::string m_master_fname_h5;
+
+  std::map<int, hid_t> m_small_id_to_number_group;
+  std::map<int, hid_t> m_vlen_id_to_number_group;
+  std::map<int, hid_t> m_cspad_id_to_number_group;
+
 public:
-  DaqMaster(const DaqMasterConfig &);
+  DaqMaster(int argc, char *argv[]);
   ~DaqMaster();
 
   void run();
@@ -211,37 +41,62 @@ public:
   void start_SWMR_access_to_master_file();
   void translation_loop();
   void close_files_and_objects();
-  void create_detector_00000_VDSes_assume_writer_layout();
+  void create_cspad_00000_VDSes_assume_writer_layout();
   void create_link_VDSes_assume_writer_layout(const std::map<int, hid_t> &groups, bool vlen_dsets = false ); 
+
+  /** assumes src_dest_path exists in all daq_writers.
+   *  write now, sends all of that stream into vds, starting at offset == daq_writer, with
+   * given stride. */
   void round_robin_VDS(const char *vds_dset_name,
                        const char *src_dset_path,
                        hid_t dset_type,
-                       const std::pair<int,int> &dset_xtra_dims);
-  void dump(FILE *);
+                       hsize_t writer_stride,
+                       hid_t parent_group,
+                       std::tuple<int,int,int> dset_xtra_dims);
 };
 
 
-DaqMaster::DaqMaster(const DaqMasterConfig &config)
-  : DaqBase(config), m_config(config) {
-  for (int writer = 0; writer < m_config.num_writers; ++writer) {
-    std::string basename = DaqBase::form_basename(m_config.writer_group, writer);
+DaqMaster::DaqMaster(int argc, char *argv[])
+  : DaqBase(argc, argv, "daq_master"), 
+    m_num_writers(m_config["daq_writer"]["num"].as<int>()),
+    m_small_num_per_writer(m_config["daq_writer"]["datasets"]["single_source"]["small"]["num_per_writer"].as<int>()),
+    m_vlen_num_per_writer(m_config["daq_writer"]["datasets"]["single_source"]["vlen"]["num_per_writer"].as<int>()),
+    m_cspad_num(m_config["daq_writer"]["datasets"]["round_robin"]["cspad"]["num"].as<int>()),
+    m_small_count_all(0),
+    m_vlen_count_all(0),
+    m_cspad_stride_all(m_config["daq_writer"]["datasets"]["round_robin"]["cspad"]["shots_per_sample_all_writers"].as<int>()),
+    m_master_fid(-1)
+{
+  if (m_cspad_num != 1) {
+    throw std::runtime_error("only 1 cspad is supported");
+  }
+
+  for (int writer = 0; writer < m_num_writers; ++writer) {
+    int small_first = writer * m_small_num_per_writer; 
+    int vlen_first = writer * m_vlen_num_per_writer; 
+    m_small_name_first.push_back(small_first);
+    m_vlen_name_first.push_back(vlen_first);
+    m_small_count.push_back(m_small_num_per_writer);
+    m_vlen_count.push_back(m_vlen_num_per_writer);
+  }
+
+  m_small_count_all = m_num_writers * m_small_num_per_writer;
+  m_vlen_count_all = m_num_writers * m_vlen_num_per_writer;
+
+
+  for (int writer = 0; writer < m_config["daq_writer"]["num"].as<int>(); ++writer) {
+    std::string basename = DaqBase::form_basename(std::string("daq_writer"), writer);
     m_writer_basenames.push_back(basename);
-    m_writer_fnames_h5.push_back(m_config.rundir + "/hdf5/" + basename + ".h5");
+    m_writer_fnames_h5.push_back(form_fullpath(std::string("daq_writer"), writer, HDF5));
     m_writer_h5.push_back(-1);
   }
-}
 
-
-void DaqMaster::dump(FILE *fout) {
-  DaqBase::dump(fout);
-  fprintf(fout, "======= DaqMaster.dump =======\n");
+  m_master_fname_h5 = DaqBase::form_fullpath("daq_master", m_id, HDF5);
 }
 
 
 void DaqMaster::run() {
   DaqBase::run_setup();
-  m_config.dump(::stdout);
-  dump(::stdout);
   wait_for_SWMR_access_to_all_writers();
   create_master_file();
   create_all_master_groups_datasets_and_attributes();
@@ -257,22 +112,21 @@ void DaqMaster::translation_loop() {
 
 void DaqMaster::close_files_and_objects() {
   
-  for (int writer = 0; writer < m_config.num_writers; ++writer) {
+  for (int writer = 0; writer < m_num_writers; ++writer) {
     hid_t h5 = m_writer_h5.at(writer);
-    if (m_config.verbose) {
+    if (m_config["verbose"].as<int>()>0) {
       std::cout<< "H5OpenObjects report for writer " << writer << std::endl;
       std::cout << H5OpenObjects(h5).dumpStr(true) << std::endl;
     }
     NONNEG( H5Fclose( h5 ) );
   }
-
   
   DaqBase::close_number_groups(m_small_id_to_number_group);
   DaqBase::close_number_groups(m_vlen_id_to_number_group);
-  DaqBase::close_number_groups(m_detector_id_to_number_group);
+  DaqBase::close_number_groups(m_cspad_id_to_number_group);
   DaqBase::close_standard_groups();
   
-  if (m_config.verbose) {
+  if (m_config["verbose"].as<int>()>0) {
     std::cout<< "H5OpenObjects report for master" << std::endl;
     std::cout << H5OpenObjects(m_master_fid).dumpStr(true) << std::endl;
   }
@@ -283,17 +137,20 @@ void DaqMaster::close_files_and_objects() {
 void DaqMaster::wait_for_SWMR_access_to_all_writers() {
   const int microseconds_to_wait = 100000;
   int writer_currently_waiting_for = 0;
-  while (writer_currently_waiting_for < m_config.num_writers) {
+  while (writer_currently_waiting_for < m_num_writers) {
     auto fname = m_writer_fnames_h5.at(writer_currently_waiting_for).c_str();
     FILE *fp = fopen(fname, "r");
     if (NULL != fp) {
-      if (m_config.verbose) fprintf(stdout, "daq_master: found %s\n" , fname);
+      if (m_config["verbose"].as<int>()>0) fprintf(stdout, "daq_master: found %s\n" , fname);
       fclose(fp);
       hid_t h5 = POS( H5Fopen(fname, H5F_ACC_RDONLY | H5F_ACC_SWMR_READ, H5P_DEFAULT) );
       m_writer_h5.at(writer_currently_waiting_for) = h5;
       ++writer_currently_waiting_for;
     } else {
-      if (m_config.verbose) fprintf(stdout, "%s_%d: still waiting for %s\n" , m_config.group.c_str(), m_config.id, m_writer_fnames_h5.at(writer_currently_waiting_for).c_str());
+      if (m_config["verbose"].as<int>()>0) {
+        fprintf(stdout, "daq_master_%d: still waiting for %s\n" , m_id, 
+                m_writer_fnames_h5.at(writer_currently_waiting_for).c_str());
+      }
       usleep(microseconds_to_wait);
     }
   }
@@ -304,9 +161,9 @@ void DaqMaster::wait_for_SWMR_access_to_all_writers() {
 void DaqMaster::create_master_file() {
   hid_t fapl = NONNEG( H5Pcreate(H5P_FILE_ACCESS) );
   NONNEG( H5Pset_libver_bounds(fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST) );
-  m_master_fid = NONNEG( H5Fcreate(m_fname_h5.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, fapl) );
-  if (m_config.verbose) {
-    fprintf(stdout, "created file: %s\n", m_fname_h5.c_str());
+  m_master_fid = NONNEG( H5Fcreate(m_master_fname_h5.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, fapl) );
+  if (m_config["verbose"].as<int>()>0) {
+    fprintf(stdout, "created file: %s\n", m_master_fname_h5.c_str());
     fflush(::stdout);
   }
   NONNEG( H5Pclose(fapl) );
@@ -316,37 +173,41 @@ void DaqMaster::create_master_file() {
 void DaqMaster::create_all_master_groups_datasets_and_attributes() {
   DaqBase::create_standard_groups(m_master_fid);
 
-  DaqBase::create_number_groups(m_small_group, m_small_id_to_number_group, 0, m_config.small_count_all);
-  DaqBase::create_number_groups(m_vlen_group, m_vlen_id_to_number_group, 0, m_config.vlen_count_all);
-  DaqBase::create_number_groups(m_detector_group, m_detector_id_to_number_group, 0, m_config.detector_count_all);
+  DaqBase::create_number_groups(m_small_group, m_small_id_to_number_group, 0, m_small_count_all);
+  DaqBase::create_number_groups(m_vlen_group, m_vlen_id_to_number_group, 0, m_vlen_count_all);
+  DaqBase::create_number_groups(m_cspad_group, m_cspad_id_to_number_group, 0, m_cspad_num);
   
-  create_detector_00000_VDSes_assume_writer_layout();
+  create_cspad_00000_VDSes_assume_writer_layout();
   create_link_VDSes_assume_writer_layout(m_small_id_to_number_group);
   create_link_VDSes_assume_writer_layout(m_vlen_id_to_number_group, true);
 }
 
 
-void DaqMaster::create_detector_00000_VDSes_assume_writer_layout() {
+void DaqMaster::create_cspad_00000_VDSes_assume_writer_layout() {
   const int NUM = 3;
   const char *dset_vds_names[NUM] = {"fiducials",
                                      "nano",
                                      "data" };
-  const char *dset_paths[NUM] = {"/detector/00000/fiducials",
-                                 "/detector/00000/nano",
-                                 "/detector/00000/data" };
+  const char *dset_paths[NUM] = {"/cspad/00000/fiducials",
+                                 "/cspad/00000/nano",
+                                 "/cspad/00000/data" };
   const hid_t dset_types[NUM] = {H5T_NATIVE_LONG,
                                  H5T_NATIVE_LONG,
                                  H5T_NATIVE_SHORT};
-  std::vector< std::pair<int,int> > dset_xtra_dims;
-  dset_xtra_dims.push_back( std::pair<int,int>(0,0) );
-  dset_xtra_dims.push_back( std::pair<int,int>(0,0) );
-  dset_xtra_dims.push_back( std::pair<int,int>(m_config.detector_rows,
-                                               m_config.detector_columns) );
+  const hid_t parent_group[NUM] = {m_cspad_id_to_number_group.at(0),
+                                   m_cspad_id_to_number_group.at(0),
+                                   m_cspad_id_to_number_group.at(0)};
+  std::vector< std::tuple<int,int, int> > dset_xtra_dims;
+  dset_xtra_dims.push_back( std::make_tuple(0,0,0) );
+  dset_xtra_dims.push_back( std::make_tuple(0,0,0) );
+  dset_xtra_dims.push_back( std::make_tuple(CSPadDim1, CSPadDim2, CSPadDim3) );
 
   for (int dset=0; dset<NUM; ++dset) {
     round_robin_VDS(dset_vds_names[dset],
                     dset_paths[dset],
                     dset_types[dset],
+                    m_num_writers * m_cspad_stride_all,
+                    parent_group[dset],
                     dset_xtra_dims.at(dset));
   }
 }
@@ -359,8 +220,11 @@ void DaqMaster::create_link_VDSes_assume_writer_layout(const std::map<int, hid_t
 void DaqMaster::round_robin_VDS(const char *vds_dset_name,
                                 const char *src_dset_path,
                                 hid_t dset_type,
-                                const std::pair<int, int> &dset_xtra_dims) {
-    if ( not ((dset_type == H5T_NATIVE_LONG) or (dset_type == H5T_NATIVE_SHORT)) ) {
+                                hsize_t writer_stride,
+                                hid_t parent_in_master,
+                                std::tuple<int, int, int> dset_xtra_dims) {
+
+  if ( not ((dset_type == H5T_NATIVE_LONG) or (dset_type == H5T_NATIVE_SHORT)) ) {
     throw std::runtime_error("round_robin_VDS, did not get native-long or native-short for dset type");
   }
   
@@ -376,43 +240,57 @@ void DaqMaster::round_robin_VDS(const char *vds_dset_name,
   }    
 
   // select all of each writers dataset, and map it to a stride in the master vds
-  std::vector<int> writer_offsets, writer_counts;
-  int detector_shots = m_config.num_shots / m_config.detector_stride_all;
-  
-  hsize_t current_dims[3] = {(hsize_t)detector_shots,
-                             (hsize_t)dset_xtra_dims.first,
-                             (hsize_t)dset_xtra_dims.second };
+  int cspad_shots = m_config["num_samples"].as<int>() / m_cspad_stride_all;
+
+  // tried to have current_dims be unlimited, but H5Screate_simple threw error
+  hsize_t current_dims[4] = {(hsize_t)0,
+                             (hsize_t)std::get<0>(dset_xtra_dims),
+                             (hsize_t)std::get<1>(dset_xtra_dims),
+                             (hsize_t)std::get<2>(dset_xtra_dims) };
+
+  hsize_t max_dims[4] = {(hsize_t)H5S_UNLIMITED,
+                         (hsize_t)std::get<0>(dset_xtra_dims),
+                         (hsize_t)std::get<1>(dset_xtra_dims),
+                         (hsize_t)std::get<2>(dset_xtra_dims) };
   int rank = -1;
-  if ((dset_xtra_dims.first == 0) and (dset_xtra_dims.second == 0)) {
+  if ((std::get<0>(dset_xtra_dims) == 0) and (std::get<1>(dset_xtra_dims) == 0) and  (std::get<2>(dset_xtra_dims) == 0)) {
     rank = 1;
-  } else if ((dset_xtra_dims.first > 0) and (dset_xtra_dims.second > 0)) {
-    rank = 3;
+  } else if ((std::get<0>(dset_xtra_dims) > 0) and (std::get<1>(dset_xtra_dims) > 0) and  (std::get<2>(dset_xtra_dims) > 0)) {
+    rank = 4;
   } else {
-    throw std::runtime_error("dset_xtra_dims are wrong, should be 0,0 or both positive");
+    throw std::runtime_error("dset_xtra_dims are wrong, should be 0,0,0 or both positive");
   }
   
-  hid_t vds_space = NONNEG( H5Screate_simple(rank, current_dims, NULL) );
+  hid_t vds_space = NONNEG( H5Screate_simple(rank, current_dims, max_dims) );
 
-  if (m_config.verbose>0) {
-    fprintf(stdout, "%s_%d: will divide %d detector shots between %d writers into vds\n",
-            m_config.group.c_str(), m_config.id, detector_shots,  m_config.num_writers);
+  if (m_config["verbose"].as<int>()>0) {
+    fprintf(stdout, "daq_master_%d: will divide %d cspad shots between %d writers into vds\n",
+            m_id, cspad_shots, m_num_writers);
   }
 
-  divide_evenly(detector_shots, m_config.num_writers, writer_offsets, writer_counts);
-  for (int writer = 0; writer < m_config.num_writers; ++writer) {
-    hsize_t writer_current_dims[3] = {(hsize_t)writer_counts.at(writer),
-                                      (hsize_t)dset_xtra_dims.first,
-                                      (hsize_t)dset_xtra_dims.second};
-    hid_t src_space = NONNEG( H5Screate_simple(rank, writer_current_dims, NULL) );
-    hsize_t start[3] = {(hsize_t)writer, 0, 0};
-    hsize_t stride[3] = {(hsize_t)m_config.num_writers, 1, 1};
-    hsize_t count[3] = {(hsize_t)writer_counts.at(writer),
-                        (hsize_t)dset_xtra_dims.first,
-                        (hsize_t)dset_xtra_dims.second};
+  for (int writer = 0; writer < m_num_writers; ++writer) {
+    hsize_t writer_current_dims[4] = {(hsize_t)H5S_UNLIMITED,
+                                      (hsize_t)std::get<0>(dset_xtra_dims),
+                                      (hsize_t)std::get<1>(dset_xtra_dims),
+                                      (hsize_t)std::get<2>(dset_xtra_dims)};
+    hsize_t writer_max_dims[4] = {(hsize_t)H5S_UNLIMITED,
+                                  (hsize_t)std::get<0>(dset_xtra_dims),
+                                  (hsize_t)std::get<1>(dset_xtra_dims),
+                                  (hsize_t)std::get<2>(dset_xtra_dims)};
+    //    hid_t src_space = NONNEG( H5Screate(H5S_SIMPLE) );
+    hid_t src_space = NONNEG( H5Screate_simple(rank, writer_current_dims, writer_max_dims) );
+    hsize_t start[4] = {(hsize_t)writer, 0, 0, 0};
+    hsize_t stride[4] = {(hsize_t)writer_stride, 1, 1, 1};
+    hsize_t count[4] = {(hsize_t)H5S_UNLIMITED,
+                        (hsize_t)std::get<0>(dset_xtra_dims),
+                        (hsize_t)std::get<1>(dset_xtra_dims),
+                        (hsize_t)std::get<2>(dset_xtra_dims)};
     hsize_t *block = NULL;
-    if (m_config.verbose>0) printf("%s_%d: mapping %s%s with %Ld elements to start=%Ld stride=%Ld count=%Ld in vds\n",
-                                   m_config.group.c_str(), m_config.id, m_writer_fnames_h5.at(writer).c_str(), src_dset_path,
-                                   writer_current_dims[0], start[0], stride[0], count[0]);
+    if (m_config["verbose"].as<int>()>0) {
+      printf("daq_master_%d: mapping %s%s with %Ld elements to start=%Ld stride=%Ld count=%Ld in vds\n",
+             m_id, m_writer_fnames_h5.at(writer).c_str(), src_dset_path,
+             writer_current_dims[0], start[0], stride[0], count[0]);
+    }
     
     NONNEG( H5Sselect_hyperslab( vds_space, H5S_SELECT_SET, start, stride, count, block ) );
     NONNEG( H5Pset_virtual( dcpl, vds_space, m_writer_fnames_h5.at(writer).c_str(),
@@ -420,8 +298,7 @@ void DaqMaster::round_robin_VDS(const char *vds_dset_name,
     NONNEG( H5Sclose( src_space ) );
   }
 
-  hid_t detGroup = m_detector_id_to_number_group.at(0);
-  hid_t dset = NONNEG( H5Dcreate2(detGroup, vds_dset_name,
+  hid_t dset = NONNEG( H5Dcreate2(parent_in_master, vds_dset_name,
                                   dset_type, vds_space, H5P_DEFAULT,
                                   dcpl, H5P_DEFAULT) );
   NONNEG( H5Sclose( vds_space ) );
@@ -432,7 +309,7 @@ void DaqMaster::round_robin_VDS(const char *vds_dset_name,
 
 void DaqMaster::start_SWMR_access_to_master_file() {
   NONNEG( H5Fstart_swmr_write(m_master_fid) );
-  if (m_config.verbose) {
+  if (m_config["verbose"].as<int>()>0) {
     printf("started SWMR access to master file\n");
     fflush(::stdout);
   }
@@ -444,13 +321,9 @@ DaqMaster::~DaqMaster() {
 
 
 int main(int argc, char *argv[]) {
-  DaqMasterConfig config;
-  if (not config.parse_command_line(argc, argv, usage)) {
-    return -1;
-  }
   H5open();
   try {
-    DaqMaster daqMaster(config);
+    DaqMaster daqMaster(argc, argv);
     daqMaster.run();
   } catch (...) {
     H5close();

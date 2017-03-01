@@ -6,12 +6,25 @@
 
 #include "daq_base.h"
 
-DaqBase::DaqBase(const DaqBaseConfig &base_config) : m_base_config(base_config) {
-  m_basename = form_basename(m_base_config.group, m_base_config.id);
-  m_fname_h5 = m_base_config.rundir + "/hdf5/" + m_basename + ".h5";
-  m_fname_pid = m_base_config.rundir + "/pids/" + m_basename + ".pid";
-  m_fname_finished = m_base_config.rundir + "/logs/" + m_basename + ".finished";
+
+DaqBase::DaqBase(int argc, char *argv[], const char *group) : m_group(group) {
+  if (argc != 3) {
+    std::cerr << "Usage: " << group << " takes 2 arguments: "<< std::endl;
+    std::cerr << "       config.yaml"<< std::endl;
+    std::cerr << "       id within group"<< std::endl;
+    throw std::runtime_error("Invalid command line arguments");
+  }
+
+  m_config = YAML::LoadFile(argv[1]);
+  m_group_config = m_config[group];
+  m_id = atoi(argv[2]);
+
+  m_basename = form_basename(m_group, m_id);
+  m_fname_h5 = form_fullpath(m_group, m_id, HDF5);
+  m_fname_pid = form_fullpath(m_group, m_id, PID);
+  m_fname_finished = form_fullpath(m_group, m_id, FINISHED);
 }
+
 
 std::string DaqBase::form_basename(std::string group, int idx) {
   static char idstr[128];
@@ -19,12 +32,29 @@ std::string DaqBase::form_basename(std::string group, int idx) {
   return group + "-s" + idstr;
 }
 
-void DaqBase::dump(FILE *fout) {
-  fprintf(fout, "basename:  %s\n", m_basename.c_str());
-  fprintf(fout, "fname_h5:  %s\n", m_fname_h5.c_str());
-  fprintf(fout, "fname_pid: %s\n", m_fname_pid.c_str());
-  
+
+std::string DaqBase::form_fullpath(std::string group, int idx, enum Location location) {
+  std::string basename = form_basename(group, idx);
+  std::string full_path = m_config["rootdir"].as<std::string>() + 
+    "/" +
+    m_config["rundir"].as<std::string>();
+  switch (location) {
+  case HDF5:
+    full_path += "/hdf5/" + basename + ".h5";
+    break;
+  case PID:
+    full_path += "/pids/" + basename + ".pid";
+    break;
+  case LOG:
+    full_path += "/logs/" + basename + ".log";
+    break;
+  case FINISHED:
+    full_path += "/logs/" + basename + ".finished";
+    break;
+  }
+  return full_path;
 }
+
 
 void DaqBase::run_setup() {
   std::chrono::time_point<std::chrono::system_clock> start_run, end_run;
@@ -34,6 +64,7 @@ void DaqBase::run_setup() {
     
   std::cout << m_basename << ": start_time: " << std::ctime(&start_run_time) << std::endl;
 }
+
 
 void DaqBase::write_pid_file() {
   pid_t pid = ::getpid();
@@ -49,7 +80,7 @@ void DaqBase::write_pid_file() {
     throw std::runtime_error("FATAL - write_pid_file");
   }
   fprintf(pid_f, "group=%s idx=%d hostname=%s pid=%d\n", 
-          m_base_config.group.c_str(), m_base_config.id, hostname, pid);
+          m_group.c_str(), m_id, hostname, pid);
   fclose(pid_f);
 }
 
@@ -57,7 +88,7 @@ void DaqBase::write_pid_file() {
 void DaqBase::create_standard_groups(hid_t parent) {
   m_small_group = NONNEG( H5Gcreate2(parent, "small", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT) );  
   m_vlen_group = NONNEG( H5Gcreate2(parent, "vlen", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT) );  
-  m_detector_group = NONNEG( H5Gcreate2(parent, "detector", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT) );  
+  m_cspad_group = NONNEG( H5Gcreate2(parent, "cspad", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT) );  
 }
 
 
@@ -79,12 +110,14 @@ void DaqBase::close_number_groups(std::map<int, hid_t> &name_to_group) {
   name_to_group.clear();
 }
 
+
 void DaqBase::close_standard_groups() {
-  NONNEG( H5Gclose( m_detector_group ) );
+  NONNEG( H5Gclose( m_cspad_group ) );
   NONNEG( H5Gclose( m_vlen_group ) );
   NONNEG( H5Gclose( m_small_group ) );
 }
   
+
 hid_t DaqBase::get_dataset(hid_t fid, const char *group1, int group2, const char *dsetname) {
   hid_t gid_group1 = NONNEG( H5Gopen2(fid, group1, H5P_DEFAULT) );
 
@@ -101,6 +134,18 @@ hid_t DaqBase::get_dataset(hid_t fid, const char *group1, int group2, const char
   return dset;
 }
 
+
+void DaqBase::load_cspad(const std::string &h5_filename,
+                         const std::string &dataset,
+                         int length,
+                         std::vector<short> &cspad_buffer) {
+  size_t total = size_t(CSPadNumElem) * size_t(length);
+  cspad_buffer.resize(total);
+  for (size_t jj = 0; jj < size_t(length); ++jj) {
+    short val = short(jj / CSPadNumElem);
+    cspad_buffer.at(jj) = val;
+  }
+}
 
 DaqBase::~DaqBase() {
   FILE *finished_f = fopen(m_fname_finished.c_str(), "w");

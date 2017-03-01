@@ -34,7 +34,11 @@ T check_pos(T val, const char *expression, int lineno, const char *fname) {
 typedef std::chrono::high_resolution_clock Clock;
 typedef std::map<int, hid_t>::const_iterator CMapIter;
 
-void divide_evenly(int total, int splits, std::vector<int> &offsets, std::vector<int> &counts);
+const int CSPadDim1 = 32;
+const int CSPadDim2 = 185;
+const int CSPadDim3 = 388;
+const int CSPadNumElem = CSPadDim1*CSPadDim2*CSPadDim3;
+
 
 struct DsetInfo {
   hid_t dset_id;
@@ -46,13 +50,13 @@ struct DsetInfo {
 };
 
 DsetInfo create_1d_dataset(hid_t, const char *, hid_t, hsize_t, size_t);
-DsetInfo create_3d_dataset(hid_t, const char *, hid_t, int, int, int, size_t);
+DsetInfo create_4d_short_dataset(hid_t parent, const char * dset, int dim1, int dim2, int dim3, int chunk_size);
+
 void append_to_1d_dset(DsetInfo &, long);
+void append_to_4d_short_dset(DsetInfo &, int, int, int, short *);
+
 hsize_t append_many_to_1d_dset(DsetInfo &, hsize_t, long *);
-void append_to_3d_dset(DsetInfo &, int, int, short *);
 
 int foo();
 
-void linedump_vector(FILE *fout, const char *hdr, const std::vector<int> &data);
-int read_args(std::vector<int> &to_fill, int num, char *argv[], int start_at);
 #endif // ANA_DAQ_UTIL_HH

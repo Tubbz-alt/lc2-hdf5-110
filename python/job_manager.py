@@ -16,6 +16,13 @@ def parse_pid_ln(orig_ln):
     group = group.strip()
     return group, idx, hostname, pid
 
+def get_paths():
+    set_paths = ''
+    for key in ['PATH','LD_LIBRARY_PATH','PYTHONPATH']:
+        searchdirs = os.environ.get('PATH',"")
+        set_paths += " %s=%s" % (key, searchdirs)
+    return set_paths
+
 class Jobs(object):
     def __init__(self, config):
         self.config = config
@@ -23,20 +30,28 @@ class Jobs(object):
         assert self.username, "no username found"
         self._launched = []
         
-    def launch(self, group, commands, hosts):
-        assert len(commands) == len(hosts)
-        idx = -1
-        for command, host in zip(commands, hosts):
-            idx += 1
+    def launch(self, group, hosts, config_file=None):
+        '''commands are of the form
+        bin/group config_file idx
+        '''
+        if not config_file:
+            config_file = os.path.join(self.config['rootdir'],
+                                       self.config['rundir'],
+                                       'config.yaml')
+        assert os.path.exists(config_file)
+
+        command = '%s bin/%s %s' % (get_paths(), group, config_file)
+        for idx, host in enumerate(hosts):
+            command += ' %d' % idx
             if host == 'local':
-                ssh_command = "%s&" % command
+                command = "%s&" % command
             else:
-                ssh_command = "ssh %s %s&" % (host, command)
-            print("launching: group=%s idx=%d -- %s" % (group, idx, ssh_command))
-            res = os.system(ssh_command)
+                command = "ssh %s %s&" % (host, command)
+            print("launching: group=%s idx=%d -- %s" % (group, idx, command))
+            res = os.system(command)
             assert res==0, "problem launching group=%s idx=%d cmd=%s\nres=%d" % \
-                (group, idx, ssh_command, res)
-            self._launched.append({'group':group, 'idx':idx, 'cmd':ssh_command, 'host':host})
+                (group, idx, command, res)
+            self._launched.append({'group':group, 'idx':idx, 'cmd':command, 'host':host})
 
     def wait(self):
         def remove_if_done(waiting_for):

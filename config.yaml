@@ -3,7 +3,7 @@ force: False
 rootdir: /reg/d/ana01/temp/davidsch/lc2
 rundir: runA
 num_samples: 1000
-verbose: 1
+verbose: 2
 flush_interval: 100
 writers_hang: False
 masters_hang: False
@@ -20,24 +20,34 @@ daq_writer:
   num_per_host: 3
   hosts:
     - local
+
   datasets:
-    small:
-      num: 100
-      chunksize: 600
-      shots_per_sample: 1
-    vlen:
-      num: 10
-      chunksize: 600
-      shots_per_sample: 1
-      min_per_shot: 5
-      max_per_shot: 15
-    detector:
-      num: 1
-      chunksize: 1
-      shots_per_sample: 100
-      dim:
-        - 1024
-        - 1024
+    round_robin:
+      cspad:
+        source:
+          filename: /reg/d/ana01/temp/davidsch/lc2/xpptut15-r0321.h5
+          dataset: /Configure:0000/Run:0000/CalibCycle:0000/CsPad::ElementV2/XppGon.0:Cspad.0/data
+          length: 10
+
+        num: 1
+        chunksize: 1
+        shots_per_sample_all_writers: 1
+        dim:
+          - 32
+          - 185
+          - 388
+
+    single_source:
+      small:
+        num_per_writer: 3
+        chunksize: 600
+        shots_per_sample: 1
+      vlen:
+        num_per_writer: 3
+        chunksize: 600
+        shots_per_sample: 1
+        min_per_shot: 5
+        max_per_shot: 15
     
 daq_master:
   num: 1
