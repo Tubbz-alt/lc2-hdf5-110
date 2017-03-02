@@ -34,8 +34,8 @@ if __name__ == '__main__':
     master = h5py.File('master.h5','r')
     vds_data = master['vds'][:]
 
-#    np.testing.assert_equal(vds_data[0::2], ones)
-#    np.testing.assert_equal(vds_data[1::2], twos)
+    np.testing.assert_equal(vds_data[0::2], ones)
+    np.testing.assert_equal(vds_data[1::2], twos)
     print("read vds in %.2f sec" % (time.time()-t0,))
     print("QUESTION: Why is the vds file so big? ")
     print("QUESTION: Why does h5py take so long to read back the data?")

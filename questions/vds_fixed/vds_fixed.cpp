@@ -23,6 +23,7 @@ int main(int argc, char *argv[]) {
   hsize_t sizeN = atol(argv[1]);
   hsize_t size0=0;
   hsize_t size2N=2*sizeN;
+  hsize_t unlimited = H5S_UNLIMITED;
   const int rank1 = 1;
 
   hid_t fapl = H5Pcreate(H5P_FILE_ACCESS);
@@ -36,12 +37,15 @@ int main(int argc, char *argv[]) {
   hid_t vds_space = H5Screate_simple(rank1, &size2N, NULL);
   hid_t src_space = H5Screate_simple(rank1, &sizeN, NULL);
   
-  hsize_t start0=0, start1=1, stride2=2, countN=sizeN, block1=1;
+  hsize_t start0=0, start1=1, stride1=1, stride2=2, countN=sizeN, count1=1, block1=1,
+    countUnlimited=H5S_UNLIMITED, blockUnlimited=H5S_UNLIMITED;
   
-  H5Sselect_hyperslab(vds_space, H5S_SELECT_SET, &start0, &stride2, &countN, &block1);
+  H5Sselect_hyperslab(vds_space, H5S_SELECT_SET, &start0, &stride2, &countUnlimited, &block1);
+  H5Sselect_hyperslab(src_space, H5S_SELECT_SET, &start0, &stride1, &count1, &blockUnlimited);
   H5Pset_virtual(dcpl, vds_space, "srcA.h5", "/dsetA", src_space);
   
-  H5Sselect_hyperslab(vds_space, H5S_SELECT_SET, &start1, &stride2, &countN, &block1);
+  H5Sselect_hyperslab(vds_space, H5S_SELECT_SET, &start1, &stride2, &countUnlimited, &block1);
+  H5Sselect_hyperslab(src_space, H5S_SELECT_SET, &start0, &stride1, &count1, &blockUnlimited);
   H5Pset_virtual(dcpl, vds_space, "srcB.h5", "/dsetB", src_space);
   
   hid_t dset = H5Dcreate2(fid, "vds", H5T_NATIVE_SHORT, vds_space, 
