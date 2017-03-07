@@ -4,5 +4,6 @@
 #include "ana_daq_util.h"
 #include "H5OpenObjects.h"
 #include "daq_base.h"
+#include "VDSRoundRobin.h"
 
 #endif // LC2DAQ_HH

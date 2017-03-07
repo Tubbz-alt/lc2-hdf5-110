@@ -84,7 +84,7 @@ DaqMaster::DaqMaster(int argc, char *argv[])
   m_vlen_count_all = m_num_writers * m_vlen_num_per_writer;
 
 
-  for (int writer = 0; writer < m_config["daq_writer"]["num"].as<int>(); ++writer) {
+  for (int writer = 0; writer < m_num_writers; ++writer) {
     std::string basename = DaqBase::form_basename(std::string("daq_writer"), writer);
     m_writer_basenames.push_back(basename);
     m_writer_fnames_h5.push_back(form_fullpath(std::string("daq_writer"), writer, HDF5));
@@ -143,7 +143,7 @@ void DaqMaster::wait_for_SWMR_access_to_all_writers() {
     if (NULL != fp) {
       if (m_config["verbose"].as<int>()>0) fprintf(stdout, "daq_master: found %s\n" , fname);
       fclose(fp);
-      hid_t h5 = POS( H5Fopen(fname, H5F_ACC_RDONLY | H5F_ACC_SWMR_READ, H5P_DEFAULT) );
+      hid_t h5 = NONNEG( H5Fopen(fname, H5F_ACC_RDONLY | H5F_ACC_SWMR_READ, H5P_DEFAULT) );
       m_writer_h5.at(writer_currently_waiting_for) = h5;
       ++writer_currently_waiting_for;
     } else {
@@ -239,10 +239,6 @@ void DaqMaster::round_robin_VDS(const char *vds_dset_name,
     NONNEG( H5Pset_fill_value (dcpl, H5T_NATIVE_SHORT, &fill_value_short) );
   }    
 
-  // select all of each writers dataset, and map it to a stride in the master vds
-  int cspad_shots = m_config["num_samples"].as<int>() / m_cspad_stride_all;
-
-  // tried to have current_dims be unlimited, but H5Screate_simple threw error
   hsize_t current_dims[4] = {(hsize_t)0,
                              (hsize_t)std::get<0>(dset_xtra_dims),
                              (hsize_t)std::get<1>(dset_xtra_dims),
@@ -263,13 +259,8 @@ void DaqMaster::round_robin_VDS(const char *vds_dset_name,
   
   hid_t vds_space = NONNEG( H5Screate_simple(rank, current_dims, max_dims) );
 
-  if (m_config["verbose"].as<int>()>0) {
-    fprintf(stdout, "daq_master_%d: will divide %d cspad shots between %d writers into vds\n",
-            m_id, cspad_shots, m_num_writers);
-  }
-
   for (int writer = 0; writer < m_num_writers; ++writer) {
-    hsize_t writer_current_dims[4] = {(hsize_t)H5S_UNLIMITED,
+    hsize_t writer_current_dims[4] = {(hsize_t)0,
                                       (hsize_t)std::get<0>(dset_xtra_dims),
                                       (hsize_t)std::get<1>(dset_xtra_dims),
                                       (hsize_t)std::get<2>(dset_xtra_dims)};
@@ -277,7 +268,6 @@ void DaqMaster::round_robin_VDS(const char *vds_dset_name,
                                   (hsize_t)std::get<0>(dset_xtra_dims),
                                   (hsize_t)std::get<1>(dset_xtra_dims),
                                   (hsize_t)std::get<2>(dset_xtra_dims)};
-    //    hid_t src_space = NONNEG( H5Screate(H5S_SIMPLE) );
     hid_t src_space = NONNEG( H5Screate_simple(rank, writer_current_dims, writer_max_dims) );
     hsize_t start[4] = {(hsize_t)writer, 0, 0, 0};
     hsize_t stride[4] = {(hsize_t)writer_stride, 1, 1, 1};
@@ -285,12 +275,10 @@ void DaqMaster::round_robin_VDS(const char *vds_dset_name,
                         (hsize_t)std::get<0>(dset_xtra_dims),
                         (hsize_t)std::get<1>(dset_xtra_dims),
                         (hsize_t)std::get<2>(dset_xtra_dims)};
-    hsize_t *block = NULL;
-    if (m_config["verbose"].as<int>()>0) {
-      printf("daq_master_%d: mapping %s%s with %Ld elements to start=%Ld stride=%Ld count=%Ld in vds\n",
-             m_id, m_writer_fnames_h5.at(writer).c_str(), src_dset_path,
-             writer_current_dims[0], start[0], stride[0], count[0]);
-    }
+    hsize_t block[4] =  {(hsize_t)1,
+                        (hsize_t)std::get<0>(dset_xtra_dims),
+                        (hsize_t)std::get<1>(dset_xtra_dims),
+                        (hsize_t)std::get<2>(dset_xtra_dims)};
     
     NONNEG( H5Sselect_hyperslab( vds_space, H5S_SELECT_SET, start, stride, count, block ) );
     NONNEG( H5Pset_virtual( dcpl, vds_space, m_writer_fnames_h5.at(writer).c_str(),

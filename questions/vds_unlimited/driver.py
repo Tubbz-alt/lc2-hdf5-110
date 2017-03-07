@@ -18,8 +18,10 @@ if __name__ == '__main__':
 
     t0 = time.time()
     ones = np.ones(N).astype(np.int16)
-    twos = 2*np.ones(N).astype(np.int16)
-
+    twos = 2*np.ones(2*N).astype(np.int16)
+    ones_with_fill = np.ones(2*N).astype(np.int16)
+    ones_with_fill[N:]=-1
+    
     srcA = h5py.File('srcA.h5','w')
     srcA['dsetA'] = ones
     srcA.close()
@@ -35,11 +37,9 @@ if __name__ == '__main__':
     master = h5py.File('master.h5','r')
     vds_data = master['vds'][:]
 
-#    np.testing.assert_equal(vds_data[0::2], ones)
-#    np.testing.assert_equal(vds_data[1::2], twos)
-    print("read vds in %.2f sec" % (time.time()-t0,))
-    print("QUESTION: Why is the vds file so big? ")
-    print("QUESTION: Why does h5py take so long to read back the data?")
+    np.testing.assert_equal(vds_data[0::2], ones_with_fill)
+    np.testing.assert_equal(vds_data[1::2], twos)
+    print("read/tested vds in %.2f sec" % (time.time()-t0,))
     sys.stdout.flush()
     os.system('ls -lrth')
 

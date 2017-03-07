@@ -6,7 +6,7 @@ LDFLAGS=-L$(PREFIX)/lib -Llib -Wl,--enable-new-dtags -Wl,-rpath='$$ORIGIN:$$ORIG
 
 .PHONY: all clean
 
-all: bin/event_writer lib/liblc2daq.so bin/daq_writer bin/daq_master bin/ana_reader_master bin/ana_reader_stream bin/ana_daq_driver
+all: bin/event_writer lib/liblc2daq.so bin/daq_writer bin/daq_master bin/ana_reader_master bin/ana_reader_stream bin/ana_daq_driver bin/test_vds_round_robin
 
 h5vds: examples/h5_vds.c
 	h5c++ examples/h5_vds.c -o h5_vds
@@ -31,11 +31,14 @@ bin/ana_daq_driver:
 	chmod a+x bin/ana_daq_driver
 
 #### LIB
-lib/liblc2daq.so: build/ana_daq_util.o build/daq_base.o build/H5OpenObjects.o include/lc2daq.h
-	$(CC) -shared $(LDFLAGS) build/ana_daq_util.o build/daq_base.o build/H5OpenObjects.o -o $@
+lib/liblc2daq.so: build/ana_daq_util.o build/daq_base.o build/H5OpenObjects.o include/lc2daq.h build/VDSRoundRobin.o 
+	$(CC) -shared $(LDFLAGS) build/ana_daq_util.o build/daq_base.o build/H5OpenObjects.o  build/VDSRoundRobin.o -o $@
 
 build/ana_daq_util.o: src/ana_daq_util.cpp include/ana_daq_util.h
 	$(CC) $(CFLAGS) src/ana_daq_util.cpp -o build/ana_daq_util.o
+
+build/VDSRoundRobin.o: src/VDSRoundRobin.cpp include/VDSRoundRobin.h
+	$(CC) $(CFLAGS) src/VDSRoundRobin.cpp -o build/VDSRoundRobin.o
 
 build/H5OpenObjects.o: src/H5OpenObjects.cpp include/H5OpenObjects.h
 	$(CC) $(CFLAGS) src/H5OpenObjects.cpp -o build/H5OpenObjects.o
@@ -84,7 +87,13 @@ bin/event_writer: build/event_writer.o lib/liblc2daq.so
 build/event_writer.o: src/event_writer.cpp
 	$(CC) $(CFLAGS) $< -o $@
 
-######### test
+build/test_vds_round_robin.o: test/test_vds_round_robin.cpp
+	$(CC) $(CFLAGS) $< -o $@
+
+######### test/tests
+bin/test_vds_round_robin: build/test_vds_round_robin.o lib/liblc2daq.so
+	$(CC) $(LDFLAGS) -llc2daq -lyaml-cpp $< -o $@
+
 test: 
 	bin/daq_writer
 	bin/daq_master
