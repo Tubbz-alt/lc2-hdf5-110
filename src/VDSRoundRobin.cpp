@@ -27,7 +27,7 @@ VDSRoundRobin::VDSRoundRobin(hid_t vds_location,
   for (size_t src = 0; src < vds_stride; ++src) {
     hsize_t vds_start = src;
     select_unlimited_count_of_vds(vds_space, vds_start, vds_stride);
-    add_to_virtual_mapping(vds_space, src_space);
+    add_to_virtual_mapping(vds_space, src_space, src);
   }
   m_vds_dset = H5Dcreate2(vds_location, vds_dset_name, m_h5type,
                           vds_space, H5P_DEFAULT, m_vds_dcpl, H5P_DEFAULT);
@@ -226,24 +226,23 @@ void VDSRoundRobin::set_vds_fill_value()
 hid_t VDSRoundRobin::create_vds_space() 
 {
   if (m_rank < 1) throw std::runtime_error("rank is < 1");
-  if (m_vds_space != -1) throw std::runtime_error("vds space already set");
   std::vector<hsize_t> current_dims(m_one_block);
   std::vector<hsize_t> max_dims(m_one_block);
   
   current_dims.at(0) = 0;
   max_dims.at(0) = H5S_UNLIMITED;
 
-  return NONNEG( H5Screate_simple( m_rank, current_dis, max_dims ) );
+  return NONNEG( H5Screate_simple( m_rank, &current_dims.at(0), &max_dims.at(0) ) );
 }
 
 hid_t VDSRoundRobin::select_all_of_any_src_as_one_block() {
   if (m_rank < 1) throw std::runtime_error("rank is < 1");
-  if (m_one_block.size() != m_rank) throw std::runtime_error("block rank != rank");
+  if (m_one_block.size() != size_t(m_rank)) throw std::runtime_error("block rank != rank");
   
   std::vector<hsize_t> current_dims(m_one_block), max_dims(m_one_block);
   current_dims.at(0) = 0;
   max_dims.at(0) = H5S_UNLIMITED;
-  hid_t src_space = NONNEG( H5Screate_simple(m_rank, current_dims, max_dims) );
+  hid_t src_space = NONNEG( H5Screate_simple(m_rank, &current_dims.at(0), &max_dims.at(0)) );
 
   std::vector<hsize_t> start0(m_rank);
   std::vector<hsize_t> stride1(m_rank, 1);
@@ -260,7 +259,7 @@ hid_t VDSRoundRobin::select_all_of_any_src_as_one_block() {
 
 void VDSRoundRobin::select_unlimited_count_of_vds(hid_t space, hsize_t start, hsize_t stride) {
   if (m_rank < 1) throw std::runtime_error("rank is < 1");
-  if (m_one_block.size() != m_rank) throw std::runtime_error("block rank != rank");
+  if (m_one_block.size() != size_t(m_rank)) throw std::runtime_error("block rank != rank");
   
   std::vector<hsize_t> start_all_dims(m_rank, 0);
   start_all_dims.at(0) = start;
@@ -279,11 +278,11 @@ void VDSRoundRobin::select_unlimited_count_of_vds(hid_t space, hsize_t start, hs
                               &block_one.at(0)) );
 }
 
-void VDSRoundRobin::add_to_virtual_mapping(hid_t vds_space, hid_t src_space, size_t src) {
+void VDSRoundRobin::add_to_virtual_mapping(hid_t vds_space, hid_t src_space, size_t which_src) {
   if (m_vds_dcpl < 0) throw std::runtime_error("vds_dcpl is < 0");
-  const char * src_fname = m_src_filenames.at(src);
-  const char *src_dset = m_src_dsets.at(src);  
-  NONNEG( H5Pset_virtual(dcpl, vds_space, src_fname, src_dset, src_space) );
+  const char * src_fname = m_src_filenames.at(which_src).c_str();
+  const char *src_dset_path = m_src_dset_paths.at(which_src).c_str();  
+  NONNEG( H5Pset_virtual(m_vds_dcpl, vds_space, src_fname, src_dset_path, src_space) );
 }
 
 void VDSRoundRobin::cleanup() {
