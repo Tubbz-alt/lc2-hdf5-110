@@ -107,6 +107,8 @@ void DaqMaster::run() {
 
 
 void DaqMaster::translation_loop() {
+  // if there are any datasets that have to be updated in the master,
+  // we put them here, for instance the fast/slow tables
 }
 
 
@@ -176,122 +178,59 @@ void DaqMaster::create_all_master_groups_datasets_and_attributes() {
   DaqBase::create_number_groups(m_small_group, m_small_id_to_number_group, 0, m_small_count_all);
   DaqBase::create_number_groups(m_vlen_group, m_vlen_id_to_number_group, 0, m_vlen_count_all);
   DaqBase::create_number_groups(m_cspad_group, m_cspad_id_to_number_group, 0, m_cspad_num);
-  
-  create_cspad_00000_VDSes_assume_writer_layout();
-  create_link_VDSes_assume_writer_layout(m_small_id_to_number_group);
-  create_link_VDSes_assume_writer_layout(m_vlen_id_to_number_group, true);
-}
 
-
-void DaqMaster::create_cspad_00000_VDSes_assume_writer_layout() {
-  const int NUM = 3;
-  const char *dset_vds_names[NUM] = {"fiducials",
-                                     "nano",
-                                     "data" };
-  const char *dset_paths[NUM] = {"/cspad/00000/fiducials",
-                                 "/cspad/00000/nano",
-                                 "/cspad/00000/data" };
-  const hid_t dset_types[NUM] = {H5T_NATIVE_LONG,
-                                 H5T_NATIVE_LONG,
-                                 H5T_NATIVE_SHORT};
-  const hid_t parent_group[NUM] = {m_cspad_id_to_number_group.at(0),
-                                   m_cspad_id_to_number_group.at(0),
-                                   m_cspad_id_to_number_group.at(0)};
-  std::vector< std::tuple<int,int, int> > dset_xtra_dims;
-  dset_xtra_dims.push_back( std::make_tuple(0,0,0) );
-  dset_xtra_dims.push_back( std::make_tuple(0,0,0) );
-  dset_xtra_dims.push_back( std::make_tuple(CSPadDim1, CSPadDim2, CSPadDim3) );
-
-  for (int dset=0; dset<NUM; ++dset) {
-    round_robin_VDS(dset_vds_names[dset],
-                    dset_paths[dset],
-                    dset_types[dset],
-                    m_num_writers * m_cspad_stride_all,
-                    parent_group[dset],
-                    dset_xtra_dims.at(dset));
+  // round robin datasets
+  for (int cur_cspad = 0; cur_cspad < m_cspad_num; ++cur_cspad) {
+    std::vector<std::string> src_data, src_fid, src_nano;
+    for (size_t idx = 0; idx < m_writer_fnames_h5.size(); ++idx) {
+      char cur_cspad_str[128];
+      sprintf(cur_cspad_str, "%5.5d", cur_cspad);
+      src_data.push_back(std::string("/cspad/") + cur_cspad_str + "/data");
+      src_fid.push_back(std::string("/cspad/") + cur_cspad_str + "/fiducials");
+      src_nano.push_back(std::string("/cspad/") + cur_cspad_str + "/nano");
+    }
+    VDSRoundRobin roundRobinData(m_cspad_id_to_number_group.at(cur_cspad), "data", m_writer_fnames_h5, src_data);
+    VDSRoundRobin roundRobinFid(m_cspad_id_to_number_group.at(cur_cspad), "fiducials", m_writer_fnames_h5, src_fid);
+    VDSRoundRobin roundRobinNano(m_cspad_id_to_number_group.at(cur_cspad), "nano", m_writer_fnames_h5, src_nano);
   }
-}
 
-
-void DaqMaster::create_link_VDSes_assume_writer_layout(const std::map<int, hid_t> &groups, bool vlen_dsets) {
-}
-
-
-void DaqMaster::round_robin_VDS(const char *vds_dset_name,
-                                const char *src_dset_path,
-                                hid_t dset_type,
-                                hsize_t writer_stride,
-                                hid_t parent_in_master,
-                                std::tuple<int, int, int> dset_xtra_dims) {
-
-  if ( not ((dset_type == H5T_NATIVE_LONG) or (dset_type == H5T_NATIVE_SHORT)) ) {
-    throw std::runtime_error("round_robin_VDS, did not get native-long or native-short for dset type");
-  }
-  
-  short fill_value_short = -1;
-  long fill_value_long = -1;
-
-  hid_t dcpl = NONNEG( H5Pcreate (H5P_DATASET_CREATE) );
-
-  if (dset_type == H5T_NATIVE_LONG) {
-    NONNEG( H5Pset_fill_value (dcpl, H5T_NATIVE_LONG, &fill_value_long) );
-  } else {
-    NONNEG( H5Pset_fill_value (dcpl, H5T_NATIVE_SHORT, &fill_value_short) );
-  }    
-
-  hsize_t current_dims[4] = {(hsize_t)0,
-                             (hsize_t)std::get<0>(dset_xtra_dims),
-                             (hsize_t)std::get<1>(dset_xtra_dims),
-                             (hsize_t)std::get<2>(dset_xtra_dims) };
-
-  hsize_t max_dims[4] = {(hsize_t)H5S_UNLIMITED,
-                         (hsize_t)std::get<0>(dset_xtra_dims),
-                         (hsize_t)std::get<1>(dset_xtra_dims),
-                         (hsize_t)std::get<2>(dset_xtra_dims) };
-  int rank = -1;
-  if ((std::get<0>(dset_xtra_dims) == 0) and (std::get<1>(dset_xtra_dims) == 0) and  (std::get<2>(dset_xtra_dims) == 0)) {
-    rank = 1;
-  } else if ((std::get<0>(dset_xtra_dims) > 0) and (std::get<1>(dset_xtra_dims) > 0) and  (std::get<2>(dset_xtra_dims) > 0)) {
-    rank = 4;
-  } else {
-    throw std::runtime_error("dset_xtra_dims are wrong, should be 0,0,0 or both positive");
-  }
-  
-  hid_t vds_space = NONNEG( H5Screate_simple(rank, current_dims, max_dims) );
-
+  // single source datasets
   for (int writer = 0; writer < m_num_writers; ++writer) {
-    hsize_t writer_current_dims[4] = {(hsize_t)0,
-                                      (hsize_t)std::get<0>(dset_xtra_dims),
-                                      (hsize_t)std::get<1>(dset_xtra_dims),
-                                      (hsize_t)std::get<2>(dset_xtra_dims)};
-    hsize_t writer_max_dims[4] = {(hsize_t)H5S_UNLIMITED,
-                                  (hsize_t)std::get<0>(dset_xtra_dims),
-                                  (hsize_t)std::get<1>(dset_xtra_dims),
-                                  (hsize_t)std::get<2>(dset_xtra_dims)};
-    hid_t src_space = NONNEG( H5Screate_simple(rank, writer_current_dims, writer_max_dims) );
-    hsize_t start[4] = {(hsize_t)writer, 0, 0, 0};
-    hsize_t stride[4] = {(hsize_t)writer_stride, 1, 1, 1};
-    hsize_t count[4] = {(hsize_t)H5S_UNLIMITED,
-                        (hsize_t)std::get<0>(dset_xtra_dims),
-                        (hsize_t)std::get<1>(dset_xtra_dims),
-                        (hsize_t)std::get<2>(dset_xtra_dims)};
-    hsize_t block[4] =  {(hsize_t)1,
-                        (hsize_t)std::get<0>(dset_xtra_dims),
-                        (hsize_t)std::get<1>(dset_xtra_dims),
-                        (hsize_t)std::get<2>(dset_xtra_dims)};
-    
-    NONNEG( H5Sselect_hyperslab( vds_space, H5S_SELECT_SET, start, stride, count, block ) );
-    NONNEG( H5Pset_virtual( dcpl, vds_space, m_writer_fnames_h5.at(writer).c_str(),
-                            src_dset_path, src_space ) );
-    NONNEG( H5Sclose( src_space ) );
-  }
 
-  hid_t dset = NONNEG( H5Dcreate2(parent_in_master, vds_dset_name,
-                                  dset_type, vds_space, H5P_DEFAULT,
-                                  dcpl, H5P_DEFAULT) );
-  NONNEG( H5Sclose( vds_space ) );
-  NONNEG( H5Pclose( dcpl ) );
-  NONNEG( H5Dclose( dset ) );
+    const char * src_writer_fname = m_writer_fnames_h5.at(writer).c_str();
+
+    int small_num_per_writer = m_config["daq_writer"]["datasets"]["single_source"]["small"]["num_per_writer"].as<int>();
+    int vlen_num_per_writer = m_config["daq_writer"]["datasets"]["single_source"]["vlen"]["num_per_writer"].as<int>();
+
+    int small_first = writer * small_num_per_writer;
+    int vlen_first = writer * vlen_num_per_writer;
+    
+    for (int small_dset = small_first; small_dset < small_first + small_num_per_writer; ++small_dset) {
+      char data_path[256], fid_path[256], nano_path[256];
+      sprintf(data_path, "/small/%5.5d/data", small_dset);
+      sprintf(fid_path, "/small/%5.5d/fiducials", small_dset);
+      sprintf(nano_path, "/small/%5.5d/nano", small_dset);
+
+      H5Lcreate_external(src_writer_fname, data_path, m_master_fid, data_path, H5P_DEFAULT, H5P_DEFAULT);
+      H5Lcreate_external(src_writer_fname, fid_path, m_master_fid, fid_path, H5P_DEFAULT, H5P_DEFAULT);
+      H5Lcreate_external(src_writer_fname, nano_path, m_master_fid, nano_path, H5P_DEFAULT, H5P_DEFAULT);
+    }
+    
+    for (int vlen_dset = vlen_first; vlen_dset < vlen_first + vlen_num_per_writer; ++vlen_dset) {
+      char blob_path[256], blobcount_path[256], blobstart_path[256], fid_path[256], nano_path[256];
+      sprintf(blob_path, "/vlen/%5.5d/blob", vlen_dset);
+      sprintf(blobcount_path, "/vlen/%5.5d/blobcount", vlen_dset);
+      sprintf(blobstart_path, "/vlen/%5.5d/blobstart", vlen_dset);
+      sprintf(fid_path, "/vlen/%5.5d/fiducials", vlen_dset);
+      sprintf(nano_path, "/vlen/%5.5d/nano", vlen_dset);
+
+      NONNEG( H5Lcreate_external(src_writer_fname, blob_path, m_master_fid, blob_path, H5P_DEFAULT, H5P_DEFAULT) );
+      NONNEG( H5Lcreate_external(src_writer_fname, blobcount_path, m_master_fid, blobcount_path, H5P_DEFAULT, H5P_DEFAULT) );
+      NONNEG( H5Lcreate_external(src_writer_fname, blobstart_path, m_master_fid, blobstart_path, H5P_DEFAULT, H5P_DEFAULT) );
+      NONNEG( H5Lcreate_external(src_writer_fname, fid_path, m_master_fid, fid_path, H5P_DEFAULT, H5P_DEFAULT) );
+      NONNEG( H5Lcreate_external(src_writer_fname, nano_path, m_master_fid, nano_path, H5P_DEFAULT, H5P_DEFAULT) );
+    }
+  }
 }
 
 

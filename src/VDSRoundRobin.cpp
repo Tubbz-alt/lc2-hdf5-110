@@ -22,7 +22,7 @@ VDSRoundRobin::VDSRoundRobin(hid_t vds_location,
   set_vds_fill_value();
   hid_t vds_space = create_vds_space();
   hsize_t vds_stride = src_filenames.size();
-  hid_t src_space = select_all_of_any_src_as_one_block();
+  hid_t src_space = select_all_of_any_src_countOne_blockUnlimited();
   
   for (size_t src = 0; src < vds_stride; ++src) {
     hsize_t vds_start = src;
@@ -31,7 +31,7 @@ VDSRoundRobin::VDSRoundRobin(hid_t vds_location,
   }
   m_vds_dset = H5Dcreate2(vds_location, vds_dset_name, m_h5type,
                           vds_space, H5P_DEFAULT, m_vds_dcpl, H5P_DEFAULT);
-
+  
   NONNEG( H5Sclose( vds_space ) );
   NONNEG( H5Sclose( src_space ) );
   cleanup();
@@ -223,6 +223,13 @@ void VDSRoundRobin::set_vds_fill_value()
   NONNEG( H5Pset_fill_value (m_vds_dcpl, m_h5type, &fill) );
 }
 
+std::ostream & operator<<(std::ostream &o, std::vector<hsize_t> & vec) {
+  for (size_t idx = 0; idx < vec.size(); ++idx) {
+    o << " " << vec.at(idx);
+  }
+  return o;
+}
+
 hid_t VDSRoundRobin::create_vds_space() 
 {
   if (m_rank < 1) throw std::runtime_error("rank is < 1");
@@ -231,11 +238,13 @@ hid_t VDSRoundRobin::create_vds_space()
   
   current_dims.at(0) = 0;
   max_dims.at(0) = H5S_UNLIMITED;
-
+  std::cout << "DBG: create_vds_space: rank=" << m_rank << " " << "current_dims" << current_dims << std::endl;
+  std::cout << "DBG: create_vds_space: rank=" << m_rank << " " << "max_dims" << max_dims << std::endl;
+  
   return NONNEG( H5Screate_simple( m_rank, &current_dims.at(0), &max_dims.at(0) ) );
 }
 
-hid_t VDSRoundRobin::select_all_of_any_src_as_one_block() {
+hid_t VDSRoundRobin::select_all_of_any_src_countOne_blockUnlimited() {
   if (m_rank < 1) throw std::runtime_error("rank is < 1");
   if (m_one_block.size() != size_t(m_rank)) throw std::runtime_error("block rank != rank");
   
@@ -245,15 +254,20 @@ hid_t VDSRoundRobin::select_all_of_any_src_as_one_block() {
   hid_t src_space = NONNEG( H5Screate_simple(m_rank, &current_dims.at(0), &max_dims.at(0)) );
 
   std::vector<hsize_t> start0(m_rank);
-  std::vector<hsize_t> stride1(m_rank, 1);
-  std::vector<hsize_t> count1(m_rank, 1);
+  std::vector<hsize_t> stride1(m_rank,1);
+  std::vector<hsize_t> count1(m_rank,1);
   std::vector<hsize_t> blockUnlimited(m_one_block);
   blockUnlimited.at(0) = H5S_UNLIMITED;
+
+  std::cout << "DBG: select src=" << "start0" << start0 << std::endl;
+  std::cout << "DBG: select src=" << "stride1" << stride1 << std::endl;
+  std::cout << "DBG: select src=" << "count1" << count1 << std::endl;
+  std::cout << "DBG: select src=" << "blockUnlim" << blockUnlimited << std::endl;
 
   NONNEG( H5Sselect_hyperslab(src_space, H5S_SELECT_SET, 
                               &start0.at(0), &stride1.at(0), &count1.at(0), 
                               &blockUnlimited.at(0)) );
-
+  
   return src_space;
 }
 
@@ -263,17 +277,23 @@ void VDSRoundRobin::select_unlimited_count_of_vds(hid_t space, hsize_t start, hs
   
   std::vector<hsize_t> start_all_dims(m_rank, 0);
   start_all_dims.at(0) = start;
-
+  
   std::vector<hsize_t> stride_all_dims(m_rank, 1);
   stride_all_dims.at(0) = stride;
 
   std::vector<hsize_t> count_unlimited(m_rank, 1);
   count_unlimited.at(0) = H5S_UNLIMITED;
 
-  std::vector<hsize_t> block_one(m_rank, 1);
+  std::vector<hsize_t> block_one(m_one_block);
+
+  std::cout << "DBG: select vds=" << "start" << start_all_dims << std::endl;
+  std::cout << "DBG: select vds=" << "stride" << stride_all_dims << std::endl;
+  std::cout << "DBG: select vds=" << "count" << count_unlimited << std::endl;
+  std::cout << "DBG: select vds=" << "block" << block_one << std::endl;
 
   NONNEG( H5Sselect_hyperslab(space, H5S_SELECT_SET, 
-                              &start_all_dims.at(0), &stride_all_dims.at(0), 
+                              &start_all_dims.at(0),
+                              &stride_all_dims.at(0), 
                               &count_unlimited.at(0), 
                               &block_one.at(0)) );
 }
@@ -281,7 +301,7 @@ void VDSRoundRobin::select_unlimited_count_of_vds(hid_t space, hsize_t start, hs
 void VDSRoundRobin::add_to_virtual_mapping(hid_t vds_space, hid_t src_space, size_t which_src) {
   if (m_vds_dcpl < 0) throw std::runtime_error("vds_dcpl is < 0");
   const char * src_fname = m_src_filenames.at(which_src).c_str();
-  const char *src_dset_path = m_src_dset_paths.at(which_src).c_str();  
+  const char * src_dset_path = m_src_dset_paths.at(which_src).c_str();  
   NONNEG( H5Pset_virtual(m_vds_dcpl, vds_space, src_fname, src_dset_path, src_space) );
 }
 
@@ -289,7 +309,7 @@ void VDSRoundRobin::cleanup() {
   for (size_t idx = 0; idx < m_src_filenames.size(); ++idx) {
     NONNEG( H5Sclose( m_src_spaces.at(idx) ) );
     NONNEG( H5Dclose( m_src_dsets.at(idx) ) );
-    NONNEG( H5Sclose( m_src_fids.at(idx) ) );
+    NONNEG( H5Fclose( m_src_fids.at(idx) ) );
   }
   NONNEG( H5Pclose(m_vds_dcpl) );
   NONNEG( H5Tclose(m_h5type) );

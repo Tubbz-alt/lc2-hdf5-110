@@ -30,7 +30,7 @@ class VDSRoundRobin {
 
   void set_vds_fill_value();
   hid_t create_vds_space();
-  hid_t select_all_of_any_src_as_one_block();
+  hid_t select_all_of_any_src_countOne_blockUnlimited();
   void select_unlimited_count_of_vds(hid_t space, hsize_t start, hsize_t stride);
   void add_to_virtual_mapping(hid_t vds_src, hid_t src_space, size_t which_src);
   void cleanup();
