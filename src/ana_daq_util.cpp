@@ -1,6 +1,8 @@
 #include <cstdio>
 #include <stdexcept>
+#include <unistd.h>
 #include "hdf5.h"
+#include "hdf5_hl.h"
 
 #include "ana_daq_util.h"
 
@@ -11,6 +13,7 @@ void check_nonneg(long long int err, const char *msg, int lineno, const char *fn
     throw std::runtime_error("FATAL: check_nonneg");
   } 
 }
+
 
 void check_pos(long long int err, const char *msg, int lineno, const char *fname) {
   if (err <= 0) {
@@ -74,6 +77,7 @@ DsetInfo create_4d_short_dataset(hid_t parent, const char *dset,
   return DsetInfo(h5_dset, 0);
 }
 
+
 hsize_t append_many_to_1d_dset(DsetInfo &dset_info, hsize_t count, long *data) {
   hsize_t start = dset_info.extent;
   dset_info.extent += count;
@@ -94,6 +98,7 @@ hsize_t append_many_to_1d_dset(DsetInfo &dset_info, hsize_t count, long *data) {
   return start;
 }
 
+
 void append_to_1d_dset(DsetInfo &dset_info, long value) {
   hsize_t current_size = dset_info.extent;
   dset_info.extent += 1;
@@ -112,6 +117,7 @@ void append_to_1d_dset(DsetInfo &dset_info, long value) {
   NONNEG( H5Sclose(dspace_id) );    
   NONNEG( H5Sclose(memory_dspace_id) );    
 }
+
 
 void append_to_4d_short_dset(DsetInfo &dset_info, int dim1, int dim2, int dim3, short *data) {
   hsize_t current = dset_info.extent;
@@ -139,7 +145,44 @@ void append_to_4d_short_dset(DsetInfo &dset_info, int dim1, int dim2, int dim3, 
   NONNEG( H5Sclose(memory_dspace_id) );
 }
 
+
 int foo() {
   return 3;
+}
+
+
+bool wait_for_dataset_to_grow(hid_t dset_id, hsize_t * dims, hsize_t len_to_grow_to, int microseconds_to_pause, int timeout_seconds) {
+  auto t0 = std::chrono::system_clock::now();
+  
+  while (true) {
+    if (dims[0] >= len_to_grow_to) {
+      return true;
+    }
+
+    if (microseconds_to_pause > 0) {
+      usleep(microseconds_to_pause);
+    }
+
+    if (timeout_seconds > 0) {
+      auto t1 = std::chrono::system_clock::now();
+      auto diff = t1-t0;
+      auto seconds = std::chrono::duration_cast<std::chrono::seconds>(diff);
+      if (seconds.count() > timeout_seconds) {
+        return false;
+      }
+    }
+
+    NONNEG( H5Drefresh(dset_id) );
+    NONNEG( H5LDget_dset_dims(dset_id, dims) );
+
+  }
+
+  return false;
+  
+}
+
+
+long read_long_from_1d(hid_t dset_id, long event_index) {
+  return 0;
 }
 

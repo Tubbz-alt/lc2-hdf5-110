@@ -15,8 +15,8 @@ T check_nonneg(T val, const char *expression, int lineno, const char *fname) {
     sprintf(msg, "ERROR: %lld = %s line=%d  file=%s\n", (long long int)val, expression, lineno, fname);
     throw std::runtime_error(msg);
   }
-  printf("%s\n" , expression );
-  fflush(stdout);
+  //  printf("%s\n" , expression );
+  //  fflush(stdout);
   return val;
 }
 
@@ -56,6 +56,10 @@ void append_to_1d_dset(DsetInfo &, long);
 void append_to_4d_short_dset(DsetInfo &, int, int, int, short *);
 
 hsize_t append_many_to_1d_dset(DsetInfo &, hsize_t, long *);
+
+bool wait_for_dataset_to_grow(hid_t dset_id, hsize_t * dims, hsize_t len_to_grow_to, int microseconds_to_pause=0, int timeout_seconds=-1.0);
+
+long read_long_from_1d(hid_t dset_id, long event_index);
 
 int foo();
 

@@ -59,6 +59,10 @@ ana_reader_master:
   # num processes analyzing data through the master
   num: 1
   num_per_host: 1
+  event_block_size: 100
+  wait_for_dsets_microsecond_pause: -1
+  wait_for_dsets_timeout: -1  
+  bypass_refresh: 1
   hosts:
     - local
   
