@@ -151,7 +151,8 @@ int foo() {
 }
 
 
-bool wait_for_dataset_to_grow(hid_t dset_id, hsize_t * dims, hsize_t len_to_grow_to, int microseconds_to_pause, int timeout_seconds) {
+bool wait_for_dataset_to_grow(hid_t dset_id, hsize_t * dims, hsize_t len_to_grow_to, 
+                              int microseconds_to_pause, int timeout_seconds) {
   auto t0 = std::chrono::system_clock::now();
   
   while (true) {
@@ -183,6 +184,7 @@ bool wait_for_dataset_to_grow(hid_t dset_id, hsize_t * dims, hsize_t len_to_grow
 
 
 long read_long_from_1d(hid_t dset_id, long event_index) {
+  
   return 0;
 }
 

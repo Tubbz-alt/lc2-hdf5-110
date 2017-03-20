@@ -1,3 +1,4 @@
+#include <climits>
 #include <string>
 #include <vector>
 #include <set>
@@ -10,10 +11,12 @@
 #include "lc2daq.h"
 #include "hdf5_hl.h"
 
+
 struct AnaReaderDsetInfo {
   hid_t dset_id;
   std::vector<hsize_t> dims;
 };
+
 
 std::map<std::string, std::vector<std::string> > get_top_group_to_final_dsets() {
   std::map<std::string, std::vector<std::string> > group2dsets;
@@ -35,6 +38,7 @@ std::map<std::string, std::vector<std::string> > get_top_group_to_final_dsets() 
   return group2dsets;
 }
 
+
 class AnaReaderMaster : public DaqBase {
   long m_event_block_size;
   long m_num_cspad;
@@ -50,7 +54,6 @@ class AnaReaderMaster : public DaqBase {
   std::string m_master_fname, m_output_fname;
   hid_t m_master_fid;
   hid_t m_output_fid;
-  std::vector<uint8_t> m_event_data;
 
   // map "fiducials", "data", etc to AnaReaderDsetInfo
   typedef std::map<std::string, AnaReaderDsetInfo> DsetName2Info;
@@ -59,19 +62,53 @@ class AnaReaderMaster : public DaqBase {
   typedef std::map<int, DsetName2Info> DsetNumber2GroupInfo;
 
   // map "small", "vlen", etc, to above
-  std::map<std::string, DsetNumber2GroupInfo> m_categories;
-  
+  std::map<std::string, DsetNumber2GroupInfo> m_topGroups;
+
+  // map "small", "vlen", "cspad" to the list of dsets, ie ["fiducials", "blobdata", ...]
   std::map<std::string, std::vector<std::string> > m_group2dsets;
+
+  // map "small" -> 100, "vlen" -> 80, i.e, the total number of subgroups in the master
   std::map<std::string, size_t> m_top_group_2_num_subgroups;
 
+  // map "small" -> 1 if they appear on every shot, etc
   std::map<std::string, int> m_rates;
   
+  std::vector<uint8_t> m_event_data;
+
+  // examples of access
+  //     get at a specific dset
+  //   m_topGroups["small"][0]["fiducials"].dset_id
+  //                                       .dims
+  //
+  //   loop over all numbered dsets for a top group/ dset name
+  // for (int sub=0; sub < m_top_group_2_num_subgroups["small"]; ++sub) {
+  //      m_topGroups["small"][sub]["fiducials"]
+  //
+  //   loop over all numbers/dsets for a top group
+  // for (int sub=0; sub < m_top_group_2_num_subgroups["small"]; ++sub) {
+  //   for (auto dsetNameIter = m_group2dsets["small"].begin(); 
+  //        dsetNameIter ! m_group2dsets["small"].end(); ++dsetNameIter) {
+  //        m_topGroups["small"][sub][*dsetNameIter]
+  //
+  //   loop over everything
+  // for (auto topIter = m_top_group_2_num_subgroups.begin();
+  //      topIter != m_top_group_2_num_subgroups.end(); ++topIter) {
+  //    std::string topName = topIter->first;
+  //    size_t numSub = topIter->second;
+  //    for (int sub=0; sub < numSub; ++sub) {
+  //       for (auto dsetNameIter = m_group2dsets[topName].begin(); 
+  //        dsetNameIter ! m_group2dsets[topName].end(); ++dsetNameIter) {
+  //          m_topGroups[topName][sub][*dsetNameIter]
+  //
+  // }
+
 protected:
   void wait_for_SWMR_access_to_master();
   void analysis_loop();
   void initialize_dset_info();
+  // return the event that they get to
+  long wait_for_all_dsets_to_get_to_at_least(long event_number);
   long calc_event_checksum(long event_number);
-  void wait_for_event(const std::pair<std::string, int> &, long event_number);
   
 public:
   AnaReaderMaster(int argc, char *argv[]);
@@ -101,15 +138,16 @@ AnaReaderMaster::AnaReaderMaster(int argc, char *argv[])
   m_master_fname = DaqBase::form_fullpath("daq_master", m_id, HDF5);
   m_output_fname = DaqBase::form_fullpath("ana_reader_master", m_id, HDF5);
 
+  // will set to "small" -> ["fiducials", "nano", "data"] ...
   m_group2dsets = get_top_group_to_final_dsets();
+
   m_top_group_2_num_subgroups[std::string("small")] = m_num_small_per_writer * m_num_writers;
   m_top_group_2_num_subgroups[std::string("vlen")] = m_num_vlen_per_writer * m_num_writers;
   m_top_group_2_num_subgroups[std::string("cspad")] = size_t(m_num_cspad);
 
   m_rates[std::string("small")] = m_small_rate;
   m_rates[std::string("vlen")] = m_vlen_rate;
-  m_rates[std::string("cspad")] = m_cspad_rate;
-  
+  m_rates[std::string("cspad")] = m_cspad_rate;  
 }
 
 
@@ -155,24 +193,35 @@ void AnaReaderMaster::analysis_loop() {
   std::vector<long> event_processed_times;
 
   size_t max_event_data_size = 0;
-  max_event_data_size += sizeof(long) * 3 * m_num_readers * m_num_small_per_writer;
-  max_event_data_size += sizeof(long) * 4 * m_num_readers * m_num_vlen_per_writer;
-  max_event_data_size += sizeof(long) * m_vlen_max_per_shot * m_num_readers * m_num_vlen_per_writer; // blobdata
-  max_event_data_size += m_num_cspad * sizeof(long) * 2;
+  max_event_data_size += sizeof(long) * 
+    m_top_group_2_num_subgroups[std::string("small")] * 
+    m_group2dsets[std::string("small")].size();
+  max_event_data_size += sizeof(long) * 
+    m_top_group_2_num_subgroups[std::string("vlen")] * 
+    m_group2dsets[std::string("vlen")].size();
+  max_event_data_size += sizeof(long) * m_vlen_max_per_shot * 
+    m_top_group_2_num_subgroups[std::string("vlen")]; // blobdata
+  max_event_data_size += m_num_cspad * sizeof(long) * 
+    m_group2dsets[std::string("cspad")].size();
   max_event_data_size += sizeof(short) * m_num_cspad * 32l * 185 * 388;
 
   m_event_data.resize(max_event_data_size);
   
   initialize_dset_info();
 
-  long next_event = m_id * m_event_block_size;
+  long event_block_start = m_id * m_event_block_size;
+  long next_available_event = -1;
 
-  while (next_event < m_num_samples) {
-    long first = next_event;
+  while (event_block_start < m_num_samples) {
+    long first = event_block_start;
     long count = std::min(m_event_block_size, m_num_samples - first);
-    next_event += (m_num_readers * m_event_block_size);
+    event_block_start += (m_num_readers * m_event_block_size);
+
     for (long event_in_block = 0; event_in_block < count; ++event_in_block) {
       long event = first + event_in_block;
+      if (event > next_available_event) {
+        next_available_event = wait_for_all_dsets_to_get_to_at_least(event);
+      }
       event_checksums.push_back(calc_event_checksum(event));
       event_numbers.push_back(event);
       m_t1 = Clock::now();
@@ -198,11 +247,11 @@ void AnaReaderMaster::initialize_dset_info() {
     auto topGroup = iter->first;
     auto dsetList = iter->second;
 
-    m_categories[topGroup] = DsetNumber2GroupInfo();
+    m_topGroups[topGroup] = DsetNumber2GroupInfo();
     size_t num_sub_groups = m_top_group_2_num_subgroups[topGroup];
 
     for (size_t sub_group=0; sub_group < num_sub_groups; ++sub_group) {
-      m_categories[topGroup][sub_group] = DsetName2Info();
+      m_topGroups[topGroup][sub_group] = DsetName2Info();
       for (auto dsetIter = dsetList.begin(); dsetIter != dsetList.end(); ++dsetIter) {
         auto dsetName = *dsetIter;
         AnaReaderDsetInfo dsetInfo;
@@ -214,7 +263,7 @@ void AnaReaderMaster::initialize_dset_info() {
         dsetInfo.dims.resize(rank);
         NONNEG( H5Sget_simple_extent_dims( dspace_id, &dsetInfo.dims.at(0), NULL ) );
         NONNEG( H5Sclose( dspace_id ) );
-        m_categories[topGroup][sub_group][dsetName] = dsetInfo;
+        m_topGroups[topGroup][sub_group][dsetName] = dsetInfo;
       }
     }
   }
@@ -222,45 +271,68 @@ void AnaReaderMaster::initialize_dset_info() {
 
 
 long AnaReaderMaster::calc_event_checksum(long event_number) {
+
   uint8_t * next_event_data = &m_event_data.at(0);
-  for (auto iter = m_group2dsets.begin(); iter != m_group2dsets.end(); ++iter) {
-    auto top_group_name = iter->first;
-    auto dset_names_list = iter->second;
-    
-    if (event_number % m_rates[top_group_name] != 0) continue;
-    hsize_t event_index = event_number/m_rates[top_group_name];
-    auto num_subgroups = m_top_group_2_num_subgroups[top_group_name];
 
-    auto dsetNumber2Info = m_categories[top_group_name];
+  typedef enum {unknown, check_event_number, copy_cspad, copy_vlen_blob, copy_long} Action;
 
-    for (size_t subgroup=0; subgroup < num_subgroups; ++subgroup) {
-      auto dsetName2info = dsetNumber2Info[subgroup];
+  for (auto topIter = m_top_group_2_num_subgroups.begin();
+       topIter != m_top_group_2_num_subgroups.end(); ++topIter) {
 
-      auto fiducialsDsetInfo = dsetName2info[std::string("fiducials")];
-      //      std::cout << "wait for: " << top_group_name << ": " << subgroup << " event: " << event_index+1 << std::endl;
-                            
-      if (0 == m_config["ana_reader_master"]["bypass_refresh"].as<int>()) {
-        wait_for_dataset_to_grow(fiducialsDsetInfo.dset_id,
-                                 &fiducialsDsetInfo.dims.at(0),
-                                 event_index+1,
-                                 m_wait_for_dsets_microsecond_pause,
-                                 m_wait_for_dsets_timeout);
+    std::string topName = topIter->first;
+
+    if (event_number % m_rates[topName] != 0) continue;
+
+    hsize_t event_index = event_number/m_rates[topName];
+
+    size_t numSub = topIter->second;
+
+    auto dsetNameList = m_group2dsets[topName];
+
+    auto sub2dsetname2info = m_topGroups[topName];
+
+    for (auto dsetNameIter = dsetNameList.begin(); 
+         dsetNameIter != dsetNameList.end(); ++dsetNameIter) {
+
+      auto dsetName = *dsetNameIter;
+
+      Action action = copy_long;
+      if (dsetName == std::string("fiducials")) {
+        action = check_event_number;
+      } else if (dsetName == std::string("nano")) {
+        continue;
+      } else if ((topName == std::string("cspad")) and (dsetName == std::string("data"))) {
+        action = copy_cspad;
+      } else if  ((topName == std::string("vlen")) and (dsetName == std::string("blobdata"))) {
+        action = copy_vlen_blob;
       }
-      // since fiducials on disk, assume all dsets for this subgroup on disk, after refresh
-      for (auto dsetNameIter = dset_names_list.begin(); dsetNameIter != dset_names_list.end(); ++dsetNameIter) {
-        auto dsetName = *dsetNameIter;
-        auto info = dsetName2info[dsetName];
-        if (0 == m_config["ana_reader_master"]["bypass_refresh"].as<int>()) {
-          NONNEG( H5Drefresh( info.dset_id ) );
-        }
-        if ((top_group_name == std::string("cspad")) and (dsetName == std::string("data"))) {
-          // copy cspad
-        } else if  ((top_group_name == std::string("vlen")) and (dsetName == std::string("blobdata"))) {
-          //copy out blob data, reading the other stuff
-        } else {
-          long value = read_long_from_1d(info.dset_id, event_index);
+
+      long value;
+      for (size_t sub = 0; sub < numSub; ++ sub) {
+        auto dsetname2info = sub2dsetname2info[sub];
+        auto info = dsetname2info[dsetName];
+          
+        switch (action) {
+        case check_event_number:
+          value = read_long_from_1d(info.dset_id, event_index);
+          if (value != event_number) {
+            std::cerr << "check_event_number failure: " << topName 
+                      << "/" << sub << "/" << dsetName << " value=" << value 
+                      << " != event_number=" << event_number << std::endl;
+            throw std::runtime_error("check_event_number failed");
+          }
+          break;
+        case copy_long:
+          value = read_long_from_1d(info.dset_id, event_index);
           *((long *)next_event_data) = value;
           next_event_data += sizeof(long);
+          break;
+        case copy_cspad:
+          break;
+        case copy_vlen_blob:
+          break;
+        case unknown:
+          throw std::runtime_error("unknown action for checksum - internal error");
         }
       }
     }
@@ -269,7 +341,38 @@ long AnaReaderMaster::calc_event_checksum(long event_number) {
 }
 
 
-void AnaReaderMaster::wait_for_event(const std::pair<std::string, int> &groupKey, long event_number) {
+long AnaReaderMaster::wait_for_all_dsets_to_get_to_at_least(long event_number) {
+  hsize_t last_avail_event = LLONG_MAX;
+
+  for (auto iter = m_group2dsets.begin(); iter != m_group2dsets.end(); ++iter) {
+    auto top_group_name = iter->first;
+    auto dset_names_list = iter->second;
+    auto num_subgroups = m_top_group_2_num_subgroups[top_group_name];
+    auto sub2dsetname2info = m_topGroups[top_group_name];
+    for (size_t sub=0; sub < num_subgroups; ++sub) {
+      auto dsetname2info = sub2dsetname2info[sub];
+      for (auto nameIter = dset_names_list.begin(); nameIter != dset_names_list.end(); ++nameIter) {
+        auto dset_name = *nameIter;
+        auto dsetInfo = dsetname2info[dset_name];
+        if (dsetInfo.dims.at(0) < hsize_t(event_number)) {
+          bool success = wait_for_dataset_to_grow(dsetInfo.dset_id,
+                                                  &dsetInfo.dims[0],
+                                                  event_number+1,
+                                                  m_wait_for_dsets_microsecond_pause,
+                                                  m_wait_for_dsets_timeout);
+          bool timed_out = not success;
+          if (timed_out) {
+            std::cerr << "Timeout waiting for " << top_group_name 
+                      <<  " / " << sub << " / " << dset_name 
+                      << " to get to size " << event_number + 1 << std::endl;
+            throw std::runtime_error("AnaReaderMaster - timeout");
+          }
+        }
+        last_avail_event = std::min(last_avail_event, dsetInfo.dims[0]);
+      }
+    }
+  }
+  return last_avail_event;
 }
 
 
