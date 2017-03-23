@@ -58,7 +58,7 @@ class DsetReaderInfo : public DsetInfo {
   virtual void close();
   virtual ~DsetReaderInfo() {};
   virtual void dim(const std::vector<hsize_t> &new_dim);
-  std::vector<hsize_t> & dim() { return DsetINfo::dim(); }
+  std::vector<hsize_t> & dim() { return DsetInfo::dim(); }
   
   DsetReaderInfo() : DsetInfo(), m_mem_space_one_event(-1), m_file_space_id(-1) {};
   DsetReaderInfo(const DsetReaderInfo &o) : DsetInfo(o), m_mem_space_one_event(o.m_mem_space_one_event), m_file_space_id(o.m_file_space_id) {};
