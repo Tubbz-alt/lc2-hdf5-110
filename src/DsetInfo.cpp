@@ -52,10 +52,14 @@ void DsetReaderInfo::dim(const std::vector<hsize_t> &new_dim) {
 }
 
 void DsetReaderInfo::select_file_space_id(int64_t event_index) {
-  std::vector<hsize_t> start(dim()), count(dim().size(), 1),
-    stride(dim().size(), 1), block(dim());
+  std::vector<hsize_t> start(dim().size(), 0);
+  std::vector<hsize_t> count(dim().size(), 1);
+  std::vector<hsize_t> stride(dim().size(), 1);
+  std::vector<hsize_t> block(dim());
+
   start.at(0)=event_index;
   block.at(0)=1;
+
   NONNEG( H5Sselect_hyperslab( file_space_id(),
                                H5S_SELECT_SET,
                                &start.at(0), &count.at(0),
