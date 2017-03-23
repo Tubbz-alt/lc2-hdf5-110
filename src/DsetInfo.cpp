@@ -30,8 +30,8 @@ void DsetReaderInfo::close() {
   if (m_mem_space_one_event > -1) {
     NONNEG( H5Sclose( m_mem_space_one_event) );
   }
-  if (m_file_space_id > -1) {
-    NONNEG( H5Sclose( m_file_space_id) );
+  if (file_space_id() > -1) {
+    NONNEG( H5Sclose( file_space_id() ) );
   }
   DsetInfo::close();
 }
