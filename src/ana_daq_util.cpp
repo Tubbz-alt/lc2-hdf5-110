@@ -166,10 +166,16 @@ DsetReaderInfo createReaderDsetInfo(hid_t parent, const char *dset_path,
   dsetInfo.dset_id( dset );
   dsetInfo.dim( dim );
 
-  hid_t mem_space_one_event;
-  hid_t file_space;
+  std::vector<hsize_t> one(dim);
+  one.at(0)=1;
+  hid_t mem_space_one_event = NONNEG( H5Screate( H5S_SIMPLE ) );
+  NONNEG( H5Sset_extent_simple(mem_space_one_event, one.size(), &one.at(0), NULL) );
+  
+  hid_t file_space = NONNEG( H5Screate( H5S_SIMPLE ) );
+  NONNEG( H5Sset_extent_simple(mem_space_one_event, dim.size(), &dim.at(0), NULL) );
 
-  dsetInfo.
+  dsetInfo.mem_space_one_event( mem_space_one_event );
+  dsetInfo.file_space_id( file_spae );
   
   return dsetInfo;
 }
