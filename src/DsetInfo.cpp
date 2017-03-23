@@ -46,8 +46,8 @@ DsetReaderInfo &DsetReaderInfo::operator=( DsetReaderInfo &o) {
 void DsetReaderInfo::dim(const std::vector<hsize_t> &new_dim) {
   if (dset_id() < 0) throw std::runtime_error("DsetReaderInfo::dim - invalid dset_id");
   if (file_space_id() < 0) throw std::runtime_error("DsetReaderInfo::dim - invalid file_space_id");
-  m_dim = dim;
-  NONNEG( H5set_extent_simple( m_file_space_id, m_dim.size(), &m_dim.at(0), NULL) );
+  DsetInfo::dim(dim);
+  NONNEG( H5set_extent_simple( m_file_space_id, dim().size(), dim().at(0), NULL) );
 }
 
 void DsetReaderInfo::select_file_space_id(int64_t event_index) {
