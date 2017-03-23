@@ -175,7 +175,7 @@ DsetReaderInfo createReaderDsetInfo(hid_t parent, const char *dset_path,
   NONNEG( H5Sset_extent_simple(mem_space_one_event, dim.size(), &dim.at(0), NULL) );
 
   dsetInfo.mem_space_one_event( mem_space_one_event );
-  dsetInfo.file_space_id( file_spae );
+  dsetInfo.file_space_id( file_space );
   
   return dsetInfo;
 }
@@ -183,7 +183,7 @@ DsetReaderInfo createReaderDsetInfo(hid_t parent, const char *dset_path,
 
 int64_t read_int64_from_1d(DsetReaderInfo &info, int64_t event_index) {
   int64_t result;
-  info.set_file_space_id(event_index);
+  info.ile_space_id(event_index);
   NONNEG( H5Dread( info.dset_id(), H5T_NATIVE_INT64, info.mem_space_one_event(),
                    info.file_space_id(), H5P_DEFAULT, &result) );
   return result;
