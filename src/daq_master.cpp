@@ -6,7 +6,7 @@
 #include <unistd.h>
 
 #include "lc2daq.h"
-
+#include "daq_base.h"
 
 class DaqMaster : public DaqBase {
   int m_num_writers;

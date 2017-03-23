@@ -2,6 +2,7 @@
 
 #include "VDSRoundRobin.h"
 #include "ana_daq_util.h"
+#include "check_macros.h"
 
 VDSRoundRobin::VDSRoundRobin(hid_t vds_location,
                              const char * vds_dset_name,
@@ -98,9 +99,9 @@ hid_t VDSRoundRobin::get_h5type_and_cache_files_dsets() {
 }
 
 int VDSRoundRobin::get_rank_and_cache_spaces() {
-  if (m_src_fids.size() != m_src_filenames.size() ) throw std::runtime_error("VDSRoundRobin - src_fids not set");
-  if (m_src_dsets.size() != m_src_filenames.size() ) throw std::runtime_error("VDSRoundRobin - src_dsets not set");
-  if (m_src_spaces.size() != 0 ) throw std::runtime_error("VDSRoundRobin - spaces not empty");
+  if (m_src_fids.size() != m_src_filenames.size()) throw std::runtime_error("VDSRoundRobin - src_fids not set");
+  if (m_src_dsets.size() != m_src_filenames.size()) throw std::runtime_error("VDSRoundRobin - src_dsets not set");
+  if (m_src_spaces.size() != 0) throw std::runtime_error("VDSRoundRobin - spaces not empty");
   
   int rank = -1;
   for (size_t idx = 0; idx < m_src_filenames.size(); ++idx) {

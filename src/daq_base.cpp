@@ -4,6 +4,7 @@
 #include <iostream>
 #include <stdexcept>
 
+#include "check_macros.h"
 #include "daq_base.h"
 
 

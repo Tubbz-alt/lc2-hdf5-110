@@ -1,154 +1,94 @@
 #include <cstdio>
 #include <stdexcept>
+#include <numeric>
 #include <unistd.h>
 #include "hdf5.h"
 #include "hdf5_hl.h"
 
+#include "check_macros.h"
 #include "ana_daq_util.h"
 
 
-void check_nonneg(long long int err, const char *msg, int lineno, const char *fname) {
-  if (err < 0) {
-    fprintf(::stderr, "ERROR: %s line=%d  file=%s\n", msg, lineno, fname);
-    throw std::runtime_error("FATAL: check_nonneg");
-  } 
+namespace {
+  
+  DsetWriterInfo create_dataset(hid_t parent, 
+                                const char *dset, 
+                                hid_t h5_type, 
+                                size_t type_size_bytes, 
+                                std::vector<hsize_t> one_chunk_dim) {
+    int rank = one_chunk_dim.size();
+    std::vector<hsize_t> current_dims(one_chunk_dim);
+    std::vector<hsize_t> maximum_dims(one_chunk_dim);
+    current_dims.at(0)=0;
+    maximum_dims.at(0) = H5S_UNLIMITED;
+
+    hid_t space_id = NONNEG( H5Screate_simple(rank, &current_dims.at(0), &maximum_dims.at(0)) );
+    hid_t plist_id = NONNEG( H5Pcreate(H5P_DATASET_CREATE) );
+    NONNEG(H5Pset_chunk(plist_id, rank, &one_chunk_dim.at(0)) );
+    
+    hid_t access_id = NONNEG( H5Pcreate(H5P_DATASET_ACCESS) );
+    
+    hsize_t num_elements_in_a_chunk = 1;
+    for (auto iter = one_chunk_dim.begin(); iter != one_chunk_dim.end(); ++iter) {
+      num_elements_in_a_chunk *= *iter;
+    }
+    hsize_t num_bytes_in_a_chunk = type_size_bytes * num_elements_in_a_chunk;
+
+    size_t rdcc_nslots = 101;
+    size_t rdcc_nbytes = num_bytes_in_a_chunk * 3;
+    double rdcc_w0 = 0.75;
+    NONNEG(H5Pset_chunk_cache(access_id, rdcc_nslots, rdcc_nbytes, rdcc_w0) );
+    
+    hid_t h5_dset = NONNEG( H5Dcreate2(parent, dset, h5_type, space_id, H5P_DEFAULT, plist_id, access_id) );
+    
+    NONNEG( H5Sclose(space_id) );
+    NONNEG( H5Pclose(plist_id) );
+    NONNEG( H5Pclose(access_id) );
+    
+    return DsetWriterInfo(h5_dset, current_dims);
+  }
+
+  void append_many_to_dset(DsetWriterInfo &dset_info, size_t num_elem, 
+                           hid_t memtype, const void *buffer) {
+    hid_t dxpl_id = H5P_DEFAULT;
+    unsigned index = 0;
+    NONNEG( H5DOappend( dset_info.dset_id(), dxpl_id, index, num_elem, memtype, buffer ) );
+  }
 }
 
 
-void check_pos(long long int err, const char *msg, int lineno, const char *fname) {
-  if (err <= 0) {
-    fprintf(::stderr, "ERROR: %s line=%d  file=%s\n", msg, lineno, fname);
-    throw std::runtime_error("FATAL: check_pos");
-  } 
+DsetWriterInfo create_1d_int64_dataset(hid_t parent, const char *dset, hsize_t chunk_size) {
+  std::vector<hsize_t> chunk_dim(1, chunk_size);
+  return create_dataset(parent, dset, H5T_NATIVE_INT64, 8, chunk_dim);
 }
 
 
-DsetInfo create_1d_dataset(hid_t parent, const char *dset, hid_t h5_type, hsize_t chunk_size, size_t type_size_bytes) {
-  int rank = 1;
-  static hsize_t current_dims = 0;
-  static hsize_t maximum_dims = H5S_UNLIMITED;
-  hid_t space_id = NONNEG( H5Screate_simple(rank, &current_dims, &maximum_dims) );
-  hid_t plist_id = NONNEG( H5Pcreate(H5P_DATASET_CREATE) );
-  int chunk_rank = 1;
-  NONNEG(H5Pset_chunk(plist_id, chunk_rank, &chunk_size) );
-  
-  hid_t access_id = NONNEG( H5Pcreate(H5P_DATASET_ACCESS) );
-  
-  size_t rdcc_nslots = 101;
-  size_t rdcc_nbytes = chunk_size * type_size_bytes * 3;
-  double rdcc_w0 = 0.75;
-  NONNEG(H5Pset_chunk_cache(access_id, rdcc_nslots, rdcc_nbytes, rdcc_w0) );
-
-  hid_t h5_dset = NONNEG( H5Dcreate2(parent, dset, h5_type, space_id, H5P_DEFAULT, plist_id, access_id) );
-
-  NONNEG( H5Sclose(space_id) );
-  NONNEG( H5Pclose(plist_id) );
-  NONNEG( H5Pclose(access_id) );
-  
-  return DsetInfo(h5_dset, 0L);
-}
-
-DsetInfo create_4d_short_dataset(hid_t parent, const char *dset,
-                                 int dim1, int dim2, int dim3, 
-                                 int chunk_size) {
-  int rank = 4;
-  static hsize_t current_dims[4] = {0, hsize_t(dim1), hsize_t(dim2), hsize_t(dim3)};
-  static hsize_t maximum_dims[4] = {H5S_UNLIMITED, hsize_t(dim1), hsize_t(dim2), hsize_t(dim3)};
-  static hsize_t chunk_dims[4] = {hsize_t(chunk_size),  hsize_t(dim1), hsize_t(dim2), hsize_t(dim3)};
-  
-  hid_t space_id = NONNEG( H5Screate_simple(rank, current_dims, maximum_dims) );
-  hid_t plist_id = NONNEG( H5Pcreate(H5P_DATASET_CREATE) );
-  NONNEG( H5Pset_chunk(plist_id, rank, chunk_dims) );
-  
-  //  hid_t access_id = NONNEG( H5Pcreate(H5P_DATASET_ACCESS) );
-  
-  //  size_t rdcc_nslots = 101;
-  //  size_t rdcc_nbytes = chunk_size * type_size_bytes * 3;
-  //  double rdcc_w0 = 0.75;
-  //  NONNEG(H5Pset_chunk_cache(access_id, rdcc_nslots, rdcc_nbytes, rdcc_w0) );
-
-  //  hid_t h5_dset = NONNEG( H5Dcreate2(parent, dset, h5_type, space_id, H5P_DEFAULT, plist_id, access_id) );
-  hid_t h5_dset = NONNEG( H5Dcreate2(parent, dset,  H5T_NATIVE_SHORT, space_id, H5P_DEFAULT, plist_id, H5P_DEFAULT) );
-
-  NONNEG(H5Sclose(space_id) );
-  NONNEG(H5Pclose(plist_id) );
-  //  NONNEG(H5Pclose(access_id) );
-  
-  return DsetInfo(h5_dset, 0);
+DsetWriterInfo create_4d_int16_dataset(hid_t parent, const char *dset,
+                                       hsize_t dim1, hsize_t dim2, hsize_t dim3, 
+                                       hsize_t chunk_size) {
+  std::vector<hsize_t> chunk_dim(4);
+  chunk_dim.at(0)=chunk_size;
+  chunk_dim.at(1)=dim1;
+  chunk_dim.at(2)=dim2;
+  chunk_dim.at(3)=dim3;
+  return create_dataset(parent, dset, H5T_NATIVE_INT16, 2, chunk_dim);
 }
 
 
-hsize_t append_many_to_1d_dset(DsetInfo &dset_info, hsize_t count, long *data) {
-  hsize_t start = dset_info.extent;
-  dset_info.extent += count;
-  NONNEG( H5Dset_extent(dset_info.dset_id, &dset_info.extent) );
-  hid_t dspace_id = NONNEG( H5Dget_space(dset_info.dset_id) );
-  NONNEG( H5Sselect_hyperslab(dspace_id, H5S_SELECT_SET,
-                              &start, NULL, &count, NULL) );
-  hid_t memory_dspace_id = NONNEG( H5Screate_simple(1, &count, &count) );
-  NONNEG( H5Dwrite(dset_info.dset_id,
-                   H5T_NATIVE_LONG,
-                   memory_dspace_id,
-                   dspace_id,
-                   H5P_DEFAULT,
-                   data) );
-  NONNEG( H5Sclose(dspace_id) );    
-  NONNEG( H5Sclose(memory_dspace_id) );    
-  
-  return start;
+void  append_many_to_1d_int64_dset(DsetWriterInfo &dset_info, hsize_t count, int64_t *data) {
+  append_many_to_dset(dset_info, count, H5T_NATIVE_INT64, data);
 }
 
 
-void append_to_1d_dset(DsetInfo &dset_info, long value) {
-  hsize_t current_size = dset_info.extent;
-  dset_info.extent += 1;
-  static hsize_t count = 1; 
-  NONNEG( H5Dset_extent(dset_info.dset_id, &dset_info.extent) );
-  hid_t dspace_id = NONNEG( H5Dget_space(dset_info.dset_id) );
-  NONNEG( H5Sselect_hyperslab(dspace_id, H5S_SELECT_SET,
-                              &current_size, NULL, &count, NULL) );
-  hid_t memory_dspace_id = NONNEG( H5Screate_simple(1, &count, &count) );
-  NONNEG( H5Dwrite(dset_info.dset_id,
-                         H5T_NATIVE_LONG,
-                         memory_dspace_id,
-                         dspace_id,
-                         H5P_DEFAULT,
-                         &value) );
-  NONNEG( H5Sclose(dspace_id) );    
-  NONNEG( H5Sclose(memory_dspace_id) );    
+void append_to_1d_int64_dset(DsetWriterInfo &dset_info, int64_t value) {
+  append_many_to_dset(dset_info, 1, H5T_NATIVE_INT64, &value);
 }
 
 
-void append_to_4d_short_dset(DsetInfo &dset_info, int dim1, int dim2, int dim3, short *data) {
-  hsize_t current = dset_info.extent;
-  dset_info.extent += 1;
-  hsize_t new_size[4] = {dset_info.extent, hsize_t(dim1), hsize_t(dim2), hsize_t(dim3)};
-  NONNEG( H5Dset_extent(dset_info.dset_id, new_size) );
-  hid_t dspace_id = NONNEG( H5Dget_space(dset_info.dset_id) );
-
-  hsize_t offset[4] = {current, 0, 0, 0};
-  hsize_t count[4] = {1, hsize_t(dim1), hsize_t(dim2), hsize_t(dim3)};
-  NONNEG( H5Sselect_hyperslab(dspace_id,
-                              H5S_SELECT_SET,
-                              offset,
-                              NULL,
-                              count,
-                              NULL) );
-  hid_t memory_dspace_id = NONNEG( H5Screate_simple(4, count, NULL) );
-  NONNEG( H5Dwrite(dset_info.dset_id,
-                         H5T_NATIVE_SHORT,
-                         memory_dspace_id,
-                         dspace_id,
-                         H5P_DEFAULT,
-                         data) );
-  NONNEG( H5Sclose(dspace_id) );    
-  NONNEG( H5Sclose(memory_dspace_id) );
+void append_to_4d_int16_dset(DsetWriterInfo &dset_info, int16_t *data) {
+  append_many_to_dset(dset_info, 1, H5T_NATIVE_INT16, data);
 }
 
-
-int foo() {
-  return 3;
-}
 
 
 bool wait_for_dataset_to_grow(hid_t dset_id, hsize_t * dims, hsize_t len_to_grow_to, 
@@ -182,9 +122,64 @@ bool wait_for_dataset_to_grow(hid_t dset_id, hsize_t * dims, hsize_t len_to_grow
   
 }
 
-
-long read_long_from_1d(hid_t dset_id, long event_index) {
+DsetReaderInfo createReaderDsetInfo(hid_t parent, const char *dset_path, 
+                                    int num_events_in_dataset_chunk_cache) {
   
-  return 0;
+  // open and close the dataset in order to read the dimensions.
+  std::vector<hsize_t> dim;
+  size_t type_size_bytes=0;
+  {
+    hid_t dset = NONNEG( H5Dopen2( parent, dset_path, H5P_DEFAULT) );
+    hid_t dspace_id = NONNEG( H5Dget_space( dset ) );
+    int rank = NONNEG( H5Sget_simple_extent_ndims( dspace_id ) );
+    dim.resize(rank);
+    NONNEG( H5Sget_simple_extent_dims( dspace_id, &dim.at(0), NULL ) );
+
+    hid_t type = NONNEG( H5Dget_type( dset ) );
+    type_size_bytes = NONNEG( H5Tget_size( type ) );
+
+    NONNEG( H5Sclose( dspace_id ) );
+    NONNEG( H5Dclose( dset ) );
+    NONNEG( H5Tclose( type ) );
+  }
+
+  // now open with a access based on dimensions
+  hid_t access_id = NONNEG( H5Pcreate(H5P_DATASET_ACCESS) );
+    
+  hsize_t chunk_cache_bytes = num_events_in_dataset_chunk_cache * type_size_bytes;
+
+  if (dim.size() > 1) {
+    for (auto iter = dim.begin()+1; iter != dim.end(); ++iter) {
+      chunk_cache_bytes *= *iter;
+    }
+  }
+
+  size_t rdcc_nslots = 101;
+  size_t rdcc_nbytes = chunk_cache_bytes;
+  double rdcc_w0 = 0.75;
+  NONNEG( H5Pset_chunk_cache(access_id, rdcc_nslots, rdcc_nbytes, rdcc_w0) );
+    
+  hid_t dset = NONNEG( H5Dopen2(parent, dset_path, access_id) );
+  NONNEG( H5Pclose( access_id ) );
+
+  DsetReaderInfo dsetInfo;
+  dsetInfo.dset_id( dset );
+  dsetInfo.dim( dim );
+
+  hid_t mem_space_one_event;
+  hid_t file_space;
+
+  dsetInfo.
+  
+  return dsetInfo;
+}
+
+
+int64_t read_int64_from_1d(DsetReaderInfo &info, int64_t event_index) {
+  int64_t result;
+  info.set_file_space_id(event_index);
+  NONNEG( H5Dread( info.dset_id(), H5T_NATIVE_INT64, info.mem_space_one_event(),
+                   info.file_space_id(), H5P_DEFAULT, &result) );
+  return result;
 }
 

@@ -6,24 +6,7 @@ LDFLAGS=-L$(PREFIX)/lib -Llib -Wl,--enable-new-dtags -Wl,-rpath='$$ORIGIN:$$ORIG
 
 .PHONY: all clean
 
-all: bin/event_writer lib/liblc2daq.so bin/daq_writer bin/daq_master bin/ana_reader_master bin/ana_reader_stream bin/ana_daq_driver bin/test_vds_round_robin
-
-h5vds: examples/h5_vds.c
-	h5c++ examples/h5_vds.c -o h5_vds
-	./h5_vds
-	ls -l vds.h5
-	h5dump -p vds.h5
-
-h5vdsmod: modified_examples/h5_vds_srcs.c modified_examples/h5_vds_master.cpp
-	h5c++ modified_examples/h5_vds_srcs.c -o h5_vds_srcs
-	h5c++ modified_examples/h5_vds_master.cpp -o h5_vds_master
-	./h5_vds_srcs
-	./h5_vds_master  0 1000 600 600 1 1024 1024 100 0 daq_writer 3  0 34 67 0 4 7 0 0 0 34 33 33 4 3 3 1 1 1 0 0 0 0 0 0 0 100 200 1 1 1 1 1 1 300 300 300
-	ls -l /reg/d/ana01/temp/davidsch/lc2/runA/vds.h5
-	h5ls -r /reg/d/ana01/temp/davidsch/lc2/runA/a.h5
-	h5ls -r /reg/d/ana01/temp/davidsch/lc2/runA/b.h5
-	h5ls -r /reg/d/ana01/temp/davidsch/lc2/runA/c.h5
-	h5dump -p /reg/d/ana01/temp/davidsch/lc2/runA/vds.h5
+all: lib/liblc2daq.so bin/daq_writer bin/daq_master bin/ana_reader_master bin/ana_reader_stream bin/ana_daq_driver
 
 #### DRIVER
 bin/ana_daq_driver:
@@ -31,26 +14,35 @@ bin/ana_daq_driver:
 	chmod a+x bin/ana_daq_driver
 
 #### LIB
-lib/liblc2daq.so: build/ana_daq_util.o build/daq_base.o build/H5OpenObjects.o include/lc2daq.h build/VDSRoundRobin.o 
-	$(CC) -shared $(LDFLAGS) build/ana_daq_util.o build/daq_base.o build/H5OpenObjects.o  build/VDSRoundRobin.o -o $@
+lib/liblc2daq.so: build/ana_daq_util.o build/daq_base.o build/H5OpenObjects.o build/VDSRoundRobin.o build/DsetInfo.o include/lc2daq.h 
+	$(CC) -shared $(LDFLAGS) build/ana_daq_util.o build/daq_base.o build/H5OpenObjects.o  build/VDSRoundRobin.o build/DsetInfo.o -o $@
 
 build/ana_daq_util.o: src/ana_daq_util.cpp include/ana_daq_util.h
 	$(CC) $(CFLAGS) src/ana_daq_util.cpp -o build/ana_daq_util.o
 
-build/VDSRoundRobin.o: src/VDSRoundRobin.cpp include/VDSRoundRobin.h
+build/VDSRoundRobin.o: src/VDSRoundRobin.cpp include/VDSRoundRobin.h 
 	$(CC) $(CFLAGS) src/VDSRoundRobin.cpp -o build/VDSRoundRobin.o
 
 build/H5OpenObjects.o: src/H5OpenObjects.cpp include/H5OpenObjects.h
 	$(CC) $(CFLAGS) src/H5OpenObjects.cpp -o build/H5OpenObjects.o
 
-build/daq_base.o: src/daq_base.cpp include/daq_base.h
+build/daq_base.o: src/daq_base.cpp include/daq_base.h 
 	$(CC) $(CFLAGS) src/daq_base.cpp -o build/daq_base.o
 
-include/ana_daq_util.h:
+build/DsetInfo.o: src/DsetInfo.cpp include/DsetInfo.h include/check_macros.h
+	$(CC) $(CFLAGS) src/DsetInfo.cpp -o build/DsetInfo.o
 
-include/daq_base.h:
+## header files
+include/lc2daq.h: include/check_macros.h include/DsetInfo.h include/ana_daq_util.h include/H5OpenObjects.h include/VDSRoundRobin.h
 
-include/lc2daq.h:
+include/ana_daq_util.h: include/DsetInfo.h
+
+include/DsetInfo.h:
+
+include/check_macros.h:
+
+include/daq_base.h: include/lc2daq.h
+
 
 #### DAQ WRITER RAW/STREAM
 bin/daq_writer: build/daq_writer.o lib/liblc2daq.so

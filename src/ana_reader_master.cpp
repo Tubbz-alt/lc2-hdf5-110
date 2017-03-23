@@ -9,13 +9,8 @@
 #include <stdint.h>
 
 #include "lc2daq.h"
+#include "daq_base.h"
 #include "hdf5_hl.h"
-
-
-struct AnaReaderDsetInfo {
-  hid_t dset_id;
-  std::vector<hsize_t> dims;
-};
 
 
 std::map<std::string, std::vector<std::string> > get_top_group_to_final_dsets() {
@@ -40,10 +35,10 @@ std::map<std::string, std::vector<std::string> > get_top_group_to_final_dsets() 
 
 
 class AnaReaderMaster : public DaqBase {
-  long m_event_block_size;
-  long m_num_cspad;
-  long m_small_rate, m_vlen_rate, m_cspad_rate;
-  long m_num_samples;
+  int64_t m_event_block_size;
+  int64_t m_num_cspad;
+  int64_t m_small_rate, m_vlen_rate, m_cspad_rate;
+  int64_t m_num_samples;
   int m_num_readers;
   int m_num_writers;
   int m_num_small_per_writer;
@@ -56,7 +51,7 @@ class AnaReaderMaster : public DaqBase {
   hid_t m_output_fid;
 
   // map "fiducials", "data", etc to AnaReaderDsetInfo
-  typedef std::map<std::string, AnaReaderDsetInfo> DsetName2Info;
+  typedef std::map<std::string, DsetReaderInfo> DsetName2Info;
 
   // map group numbers, i.e, 00000, to above
   typedef std::map<int, DsetName2Info> DsetNumber2GroupInfo;
@@ -72,7 +67,10 @@ class AnaReaderMaster : public DaqBase {
 
   // map "small" -> 1 if they appear on every shot, etc
   std::map<std::string, int> m_rates;
-  
+
+  // map "small" -> N where N will be in terms of number of events
+  std::map<std::string, int> m_events_per_dataset_chunkcache;
+
   std::vector<uint8_t> m_event_data;
 
   // examples of access
@@ -106,9 +104,10 @@ protected:
   void wait_for_SWMR_access_to_master();
   void analysis_loop();
   void initialize_dset_info();
+  void close_dset_info();
   // return the event that they get to
-  long wait_for_all_dsets_to_get_to_at_least(long event_number);
-  long calc_event_checksum(long event_number);
+  int64_t wait_for_all_dsets_to_get_to_at_least(int64_t event_number);
+  int64_t calc_event_checksum(int64_t event_number);
   
 public:
   AnaReaderMaster(int argc, char *argv[]);
@@ -119,12 +118,12 @@ public:
 
 AnaReaderMaster::AnaReaderMaster(int argc, char *argv[])
   : DaqBase(argc, argv, "ana_reader_master"), 
-    m_event_block_size(m_config["ana_reader_master"]["event_block_size"].as<long>()),
+    m_event_block_size(m_config["ana_reader_master"]["event_block_size"].as<int64_t>()),
     m_num_cspad(m_config["daq_writer"]["datasets"]["round_robin"]["cspad"]["num"].as<int>()),
-    m_small_rate(m_config["daq_writer"]["datasets"]["single_source"]["small"]["shots_per_sample"].as<long>()),
-    m_vlen_rate(m_config["daq_writer"]["datasets"]["single_source"]["vlen"]["shots_per_sample"].as<long>()),
-    m_cspad_rate(m_config["daq_writer"]["datasets"]["round_robin"]["cspad"]["shots_per_sample_all_writers"].as<long>()),
-    m_num_samples(m_config["num_samples"].as<long>()),
+    m_small_rate(m_config["daq_writer"]["datasets"]["single_source"]["small"]["shots_per_sample"].as<int64_t>()),
+    m_vlen_rate(m_config["daq_writer"]["datasets"]["single_source"]["vlen"]["shots_per_sample"].as<int64_t>()),
+    m_cspad_rate(m_config["daq_writer"]["datasets"]["round_robin"]["cspad"]["shots_per_sample_all_writers"].as<int64_t>()),
+    m_num_samples(m_config["num_samples"].as<int64_t>()),
     m_num_readers(m_config["ana_reader_master"]["num"].as<int>()),
     m_num_writers(m_config["daq_writer"]["num"].as<int>()),
     m_num_small_per_writer(m_config["daq_writer"]["datasets"]["single_source"]["small"]["num_per_writer"].as<int>()),
@@ -148,6 +147,15 @@ AnaReaderMaster::AnaReaderMaster(int argc, char *argv[])
   m_rates[std::string("small")] = m_small_rate;
   m_rates[std::string("vlen")] = m_vlen_rate;
   m_rates[std::string("cspad")] = m_cspad_rate;  
+
+  int num_writer_chunks_per_dataset_chunk_cache = m_config["ana_reader_master"]["num_writer_chunks_per_dataset_chunk_cache"].as<int>();
+  int small_chunksize = m_config["daq_writer"]["datasets"]["single_source"]["small"]["chunksize"].as<int>();
+  int vlen_chunksize = m_config["daq_writer"]["datasets"]["single_source"]["vlen"]["chunksize"].as<int>();
+  int cspad_chunksize = m_config["daq_writer"]["datasets"]["round_robin"]["cspad"]["chunksize"].as<int>();
+  
+  m_events_per_dataset_chunkcache[std::string("small")] = num_writer_chunks_per_dataset_chunk_cache * small_chunksize;
+  m_events_per_dataset_chunkcache[std::string("vlen")] = num_writer_chunks_per_dataset_chunk_cache * vlen_chunksize;
+  m_events_per_dataset_chunkcache[std::string("cspad")] = num_writer_chunks_per_dataset_chunk_cache * cspad_chunksize;
 }
 
 
@@ -188,20 +196,20 @@ void AnaReaderMaster::wait_for_SWMR_access_to_master() {
 
 
 void AnaReaderMaster::analysis_loop() {    
-  std::vector<long> event_checksums;
-  std::vector<long> event_numbers;
-  std::vector<long> event_processed_times;
+  std::vector<int64_t> event_checksums;
+  std::vector<int64_t> event_numbers;
+  std::vector<int64_t> event_processed_times;
 
   size_t max_event_data_size = 0;
-  max_event_data_size += sizeof(long) * 
+  max_event_data_size += sizeof(int64_t) * 
     m_top_group_2_num_subgroups[std::string("small")] * 
     m_group2dsets[std::string("small")].size();
-  max_event_data_size += sizeof(long) * 
+  max_event_data_size += sizeof(int64_t) * 
     m_top_group_2_num_subgroups[std::string("vlen")] * 
     m_group2dsets[std::string("vlen")].size();
-  max_event_data_size += sizeof(long) * m_vlen_max_per_shot * 
+  max_event_data_size += sizeof(int64_t) * m_vlen_max_per_shot * 
     m_top_group_2_num_subgroups[std::string("vlen")]; // blobdata
-  max_event_data_size += m_num_cspad * sizeof(long) * 
+  max_event_data_size += m_num_cspad * sizeof(int64_t) * 
     m_group2dsets[std::string("cspad")].size();
   max_event_data_size += sizeof(short) * m_num_cspad * 32l * 185 * 388;
 
@@ -209,16 +217,16 @@ void AnaReaderMaster::analysis_loop() {
   
   initialize_dset_info();
 
-  long event_block_start = m_id * m_event_block_size;
-  long next_available_event = -1;
+  int64_t event_block_start = m_id * m_event_block_size;
+  int64_t next_available_event = -1;
 
   while (event_block_start < m_num_samples) {
-    long first = event_block_start;
-    long count = std::min(m_event_block_size, m_num_samples - first);
+    int64_t first = event_block_start;
+    int64_t count = std::min(m_event_block_size, m_num_samples - first);
     event_block_start += (m_num_readers * m_event_block_size);
 
-    for (long event_in_block = 0; event_in_block < count; ++event_in_block) {
-      long event = first + event_in_block;
+    for (int64_t event_in_block = 0; event_in_block < count; ++event_in_block) {
+      int64_t event = first + event_in_block;
       if (event > next_available_event) {
         next_available_event = wait_for_all_dsets_to_get_to_at_least(event);
       }
@@ -231,18 +239,45 @@ void AnaReaderMaster::analysis_loop() {
     }
   }
 
+  close_dset_info();
+
   int rank1=1;
   hsize_t dim=event_numbers.size();
 
-  H5LTmake_dataset(m_output_fid, "/event_checksums", rank1, &dim, H5T_NATIVE_LONG, &event_checksums.at(0));
-  H5LTmake_dataset(m_output_fid, "/event_numbers", rank1, &dim, H5T_NATIVE_LONG, &event_numbers.at(0));
-  H5LTmake_dataset(m_output_fid, "/event_processed_times", rank1, &dim, H5T_NATIVE_LONG, &event_processed_times.at(0));
+  H5LTmake_dataset(m_output_fid, "/event_checksums", rank1, &dim, H5T_NATIVE_INT64, &event_checksums.at(0));
+  H5LTmake_dataset(m_output_fid, "/event_numbers", rank1, &dim, H5T_NATIVE_INT64, &event_numbers.at(0));
+  H5LTmake_dataset(m_output_fid, "/event_processed_times", rank1, &dim, H5T_NATIVE_INT64, &event_processed_times.at(0));
 }
 
 
 void AnaReaderMaster::initialize_dset_info() {
-  char buffer[512];
+  char dset_path[512];
   
+  for (auto iter = m_group2dsets.begin(); iter != m_group2dsets.end(); ++iter) {
+    auto topGroup = iter->first;
+    auto dsetList = iter->second;
+    int num_events_in_dataset_chunk_cache = m_events_per_dataset_chunkcache[topGroup];
+
+    m_topGroups[topGroup] = DsetNumber2GroupInfo();
+    size_t num_sub_groups = m_top_group_2_num_subgroups[topGroup];
+
+    for (size_t sub_group=0; sub_group < num_sub_groups; ++sub_group) {
+      m_topGroups[topGroup][sub_group] = DsetName2Info();
+      for (auto dsetIter = dsetList.begin(); dsetIter != dsetList.end(); ++dsetIter) {
+        auto dsetName = *dsetIter;
+        sprintf(dset_path, "/%s/%5.5ld/%s", topGroup.c_str(), sub_group, dsetName.c_str());
+        
+        DsetReaderInfo dsetInfo = createReaderDsetInfo(m_master_fid, 
+                                                       dset_path,
+                                                       num_events_in_dataset_chunk_cache);
+        m_topGroups[topGroup][sub_group][dsetName] = dsetInfo;
+      }
+    }
+  }
+}
+
+
+void AnaReaderMaster::close_dset_info() {
   for (auto iter = m_group2dsets.begin(); iter != m_group2dsets.end(); ++iter) {
     auto topGroup = iter->first;
     auto dsetList = iter->second;
@@ -254,16 +289,9 @@ void AnaReaderMaster::initialize_dset_info() {
       m_topGroups[topGroup][sub_group] = DsetName2Info();
       for (auto dsetIter = dsetList.begin(); dsetIter != dsetList.end(); ++dsetIter) {
         auto dsetName = *dsetIter;
-        AnaReaderDsetInfo dsetInfo;
-        sprintf(buffer, "/%s/%5.5ld/%s", topGroup.c_str(), sub_group, dsetName.c_str());
-        
-        dsetInfo.dset_id = NONNEG( H5Dopen2( m_master_fid, buffer, H5P_DEFAULT) );
-        hid_t dspace_id = NONNEG( H5Dget_space( dsetInfo.dset_id ) );
-        int rank = NONNEG( H5Sget_simple_extent_ndims( dspace_id ) );
-        dsetInfo.dims.resize(rank);
-        NONNEG( H5Sget_simple_extent_dims( dspace_id, &dsetInfo.dims.at(0), NULL ) );
-        NONNEG( H5Sclose( dspace_id ) );
-        m_topGroups[topGroup][sub_group][dsetName] = dsetInfo;
+        auto dsetInfo = m_topGroups[topGroup][sub_group][dsetName];
+        dsetInfo.close();
+        m_topGroups[topGroup][sub_group].erase(dsetName);
       }
     }
   }
@@ -307,14 +335,14 @@ long AnaReaderMaster::calc_event_checksum(long event_number) {
         action = copy_vlen_blob;
       }
 
-      long value;
+      int64_t value;
       for (size_t sub = 0; sub < numSub; ++ sub) {
         auto dsetname2info = sub2dsetname2info[sub];
         auto info = dsetname2info[dsetName];
           
         switch (action) {
         case check_event_number:
-          value = read_long_from_1d(info.dset_id, event_index);
+          value = read_int64_from_1d(info, event_index);
           if (value != event_number) {
             std::cerr << "check_event_number failure: " << topName 
                       << "/" << sub << "/" << dsetName << " value=" << value 
@@ -323,9 +351,9 @@ long AnaReaderMaster::calc_event_checksum(long event_number) {
           }
           break;
         case copy_long:
-          value = read_long_from_1d(info.dset_id, event_index);
-          *((long *)next_event_data) = value;
-          next_event_data += sizeof(long);
+          value = read_int64_from_1d(info, event_index);
+          *((int64_t *)next_event_data) = value;
+          next_event_data += sizeof(int64_t);
           break;
         case copy_cspad:
           break;
@@ -354,9 +382,9 @@ long AnaReaderMaster::wait_for_all_dsets_to_get_to_at_least(long event_number) {
       for (auto nameIter = dset_names_list.begin(); nameIter != dset_names_list.end(); ++nameIter) {
         auto dset_name = *nameIter;
         auto dsetInfo = dsetname2info[dset_name];
-        if (dsetInfo.dims.at(0) < hsize_t(event_number)) {
-          bool success = wait_for_dataset_to_grow(dsetInfo.dset_id,
-                                                  &dsetInfo.dims[0],
+        if (dsetInfo.dim().at(0) < hsize_t(event_number)) {
+          bool success = wait_for_dataset_to_grow(dsetInfo.dset_id(),
+                                                  &dsetInfo.dim()[0],
                                                   event_number+1,
                                                   m_wait_for_dsets_microsecond_pause,
                                                   m_wait_for_dsets_timeout);
@@ -368,7 +396,7 @@ long AnaReaderMaster::wait_for_all_dsets_to_get_to_at_least(long event_number) {
             throw std::runtime_error("AnaReaderMaster - timeout");
           }
         }
-        last_avail_event = std::min(last_avail_event, dsetInfo.dims[0]);
+        last_avail_event = std::min(last_avail_event, dsetInfo.dim()[0]);
       }
     }
   }
