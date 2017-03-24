@@ -165,12 +165,6 @@ DsetReaderInfo createReaderDsetInfo(hid_t parent, const char *dset_path,
   DsetReaderInfo dsetInfo;
   dsetInfo.dset_id( dset );
   dsetInfo.dim( dim );
-
-  std::vector<hsize_t> one(dim);
-  one.at(0)=1;
-  hid_t mem_space_one_event = NONNEG( H5Screate( H5S_SIMPLE ) );
-  NONNEG( H5Sset_extent_simple(mem_space_one_event, one.size(), &one.at(0), NULL) );
-  dsetInfo.mem_space_one_event( mem_space_one_event );
   
   return dsetInfo;
 }
@@ -178,8 +172,8 @@ DsetReaderInfo createReaderDsetInfo(hid_t parent, const char *dset_path,
 
 int64_t read_int64_from_1d(DsetReaderInfo &info, int64_t event_index) {
   int64_t result;
-  info.select_file_space_id(event_index);
-  NONNEG( H5Dread( info.dset_id(), H5T_NATIVE_INT64, info.mem_space_one_event(),
+  info.file_space_select(event_index);
+  NONNEG( H5Dread( info.dset_id(), H5T_NATIVE_INT64, info.mem_space_id(),
                    info.file_space_id(), H5P_DEFAULT, &result) );
   printf("read\n");
   return result;

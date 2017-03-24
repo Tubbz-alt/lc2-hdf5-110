@@ -11,8 +11,8 @@ T check_nonneg(T val, const char *expression, int lineno, const char *fname) {
     sprintf(msg, "ERROR: %lld = %s line=%d  file=%s\n", (long long int)val, expression, lineno, fname);
     throw std::runtime_error(msg);
   }
-  //  printf("%s\n" , expression );
-  //  fflush(stdout);
+  printf("%s\n" , expression );
+  fflush(stdout);
   return val;
 }
 

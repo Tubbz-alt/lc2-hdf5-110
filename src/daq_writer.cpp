@@ -127,6 +127,9 @@ DaqWriter::DaqWriter(int argc, char *argv[])
   m_cspad_first = 0;
   m_cspad_count = m_group_config["datasets"]["round_robin"]["cspad"]["num"].as<int>();
 
+  // cspad is round robin, everyone start on their id
+  m_next_cspad = m_id;
+  
   m_vlen_data.resize(m_vlen_max_per_shot);
 }
 

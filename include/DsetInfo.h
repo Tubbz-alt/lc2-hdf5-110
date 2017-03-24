@@ -50,27 +50,32 @@ class DsetWriterInfo : public DsetInfo {
 };
 
 class DsetReaderInfo : public DsetInfo {
-  hid_t m_mem_space_one_event;
+  hid_t m_mem_space_id;
   hid_t m_file_space_id;
 
- public:
+  std::vector<hsize_t> m_file_select_start;
+  std::vector<hsize_t> m_file_select_count;
+  std::vector<hsize_t> m_file_select_stride;
+  std::vector<hsize_t> m_file_select_block;
+
+public:
   
   virtual void close();
   virtual ~DsetReaderInfo() {};
   virtual void dim(const std::vector<hsize_t> &new_dim);
   std::vector<hsize_t> & dim() { return DsetInfo::dim(); }
   
-  DsetReaderInfo() : DsetInfo(), m_mem_space_one_event(-1), m_file_space_id(-1) {};
-  DsetReaderInfo(const DsetReaderInfo &o) : DsetInfo(o), m_mem_space_one_event(o.m_mem_space_one_event), m_file_space_id(o.m_file_space_id) {};
+  DsetReaderInfo() : DsetInfo(), m_mem_space_id(-1), m_file_space_id(-1) {};
+  DsetReaderInfo(const DsetReaderInfo &o);
   DsetReaderInfo &operator=(DsetReaderInfo &o);
 
-  hid_t mem_space_one_event() const { return m_mem_space_one_event; }
+  hid_t mem_space_id() const { return m_mem_space_id; }
   hid_t file_space_id() const { return m_file_space_id; }
 
-  void mem_space_one_event(hid_t space)  { m_mem_space_one_event = space; }
+  void mem_space_id(hid_t space)  { m_mem_space_id = space; }
   void file_space_id(hid_t space) { m_file_space_id = space; }
 
-  void select_file_space_id(int64_t event_index);
+  void file_space_select(int64_t event_index);
 
 };
 
