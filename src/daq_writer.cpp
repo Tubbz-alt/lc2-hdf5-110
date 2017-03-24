@@ -176,6 +176,8 @@ void DaqWriter::create_file() {
 
 
 void DaqWriter::close_all_groups_datasets() {
+  printf("close all groups datasets\n");
+  fflush(::stdout);
   // need to implement? or is file close Ok?
 }
 

@@ -50,11 +50,96 @@ namespace {
 
   void append_many_to_dset(DsetWriterInfo &dset_info, size_t num_elem, 
                            hid_t memtype, const void *buffer) {
+    printf("append_many_to_dset - start dset=%ld\n", dset_info.dset_id());
+    fflush(stdout);
     hid_t dxpl_id = H5P_DEFAULT;
     unsigned index = 0;
     NONNEG( H5DOappend( dset_info.dset_id(), dxpl_id, index, num_elem, memtype, buffer ) );
+    printf("append_many_to_dset - appended %ld\n", num_elem);
+    fflush(stdout);
   }
-}
+
+  size_t calc_bbox_bytes(const std::vector<hsize_t> bbox_start, 
+                         const std::vector<hsize_t> bbox_end, size_t bytes_per_elem) {
+    size_t total = bytes_per_elem;
+    for (size_t dim = 0; dim < bbox_start.size(); ++dim) {
+      size_t dim_len = bbox_end.at(dim) - bbox_start[dim] + 1;
+      total *= dim_len;
+    }
+    return total;
+  }
+
+  void check_bounds(const std::vector<hsize_t> &index, const std::vector<hsize_t> &dims) {
+    for (size_t rank=0; rank < dims.size(); ++rank) {
+      if ((index.at(rank) < 0) or (index.at(rank) >= dims[rank])) {
+        std::cerr << "check_bounds: rank=" << rank 
+                  << " index=" << index.at(rank)
+                  << " bound=" << dims[rank] << std::endl;
+        throw std::runtime_error("check_bounds");
+      } 
+    }
+  }
+  
+  void check_read( hid_t dset, hid_t h5type, hid_t mem_space, hid_t file_space, size_t buffer_len_bytes) {
+    hid_t dset_space = NONNEG( H5Dget_space( dset ) );
+    htri_t is_simple = NONNEG( H5Sis_simple( dset_space ) );
+    if (0 == is_simple) {
+      std::cerr << "check_read called on dset that is not simple, dset=" << dset << std::endl;
+      NONNEG( H5Sclose( dset_space ) );
+      return;
+    }
+
+    hid_t dset_type = NONNEG( H5Dget_type( dset ) );
+    htri_t types_equal = NONNEG( H5Tequal( dset_type, h5type ) );
+    NONNEG( H5Tclose( dset_type ) );
+    if (0 == types_equal) {
+      throw std::runtime_error("check_read - types not equal");
+    }
+
+    int dset_rank = NONNEG( H5Sget_simple_extent_ndims( dset_space ) );
+    std::vector< hsize_t > dset_dims(dset_rank);
+    NONNEG( H5Sget_simple_extent_dims( dset_space, &dset_dims.at(0), NULL ) );
+    NONNEG( H5Sclose( dset_space ) );
+    
+    int mem_rank = NONNEG( H5Sget_simple_extent_ndims( mem_space ) );
+    int file_rank = NONNEG( H5Sget_simple_extent_ndims( file_space ) );
+    if (dset_rank != mem_rank) {
+      throw std::runtime_error("check_read - dset_rank != mem_rank");
+    }
+    if (dset_rank != file_rank) {
+      throw std::runtime_error("check_read - dset_rank != file_rank");
+    }
+
+    std::vector< hsize_t > mem_bbox_start(dset_rank), file_bbox_start(dset_rank);
+    std::vector< hsize_t > mem_bbox_end(dset_rank), file_bbox_end(dset_rank);
+
+    NONNEG( H5Sget_select_bounds( mem_space, &mem_bbox_start.at(0), &mem_bbox_end.at(0) ) );
+    NONNEG( H5Sget_select_bounds( file_space, &file_bbox_start.at(0), &file_bbox_end.at(0) ) );
+
+    for (size_t dim = 0; dim < mem_bbox_start.size(); ++dim) {
+      if (0 != mem_bbox_start[dim]) {
+        throw std::runtime_error("check_read - mem bbox does not start at 0");
+      }
+    }
+
+    size_t type_size_bytes = H5Tget_size( h5type );
+    size_t mem_bbox_bytes = calc_bbox_bytes( mem_bbox_start, mem_bbox_end, type_size_bytes );
+    if (mem_bbox_bytes > buffer_len_bytes) {
+      std::cerr << "mem_bbox_bytes=" << mem_bbox_bytes << " buffer_len=" << buffer_len_bytes << std::endl;
+      throw std::runtime_error("check_read - mem bbox to large for buffer");
+    }
+    size_t file_bbox_bytes = calc_bbox_bytes( file_bbox_start, file_bbox_end, type_size_bytes );
+    if (file_bbox_bytes != mem_bbox_bytes) {
+      std::cerr << "mem_bbox_bytes=" << mem_bbox_bytes << " file_bbox_bytes=" << file_bbox_bytes << std::endl;
+      throw std::runtime_error("file and mem bbox bytes not the same, OK if doing strided read from file");
+    }
+
+    check_bounds(file_bbox_start, dset_dims);
+    check_bounds(file_bbox_end, dset_dims);
+    
+  }
+
+} // local namespace
 
 
 DsetWriterInfo create_1d_int64_dataset(hid_t parent, const char *dset, hsize_t chunk_size) {
@@ -173,6 +258,10 @@ DsetReaderInfo createReaderDsetInfo(hid_t parent, const char *dset_path,
 int64_t read_int64_from_1d(DsetReaderInfo &info, int64_t event_index) {
   int64_t result;
   info.file_space_select(event_index);
+
+  check_read(info.dset_id(), H5T_NATIVE_INT64, 
+             info.mem_space_id(), info.file_space_id(), sizeof(result));
+
   NONNEG( H5Dread( info.dset_id(), H5T_NATIVE_INT64, info.mem_space_id(),
                    info.file_space_id(), H5P_DEFAULT, &result) );
   printf("read\n");
