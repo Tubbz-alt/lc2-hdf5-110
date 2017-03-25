@@ -1,30 +1,98 @@
-#include "DsetInfo.h"
+#include "Dset.h"
 #include "check_macros.h"
 
-// DsetInfo
-void DsetInfo::close() {
-  NONNEG( H5Dclose( dset_id() ) );
-}
-
-// DsetWriterInfo
-void DsetWriterInfo::close() {
-  DsetInfo::close();
-}
-
-DsetWriterInfo &DsetWriterInfo::operator=( DsetWriterInfo &o) {
-  DsetInfo::operator=(o);
-  return *this;
-}
-
-DsetWriterInfo::DsetWriterInfo(hid_t _dset_id, std::vector<hsize_t> _dim) :
-  DsetInfo(_dset_id, _dim)
+Dset::Dset() : 
+  m_id(-1), 
+  m_file_space(-1),
+  m_mem_space(-1)
 {
 }
 
-DsetWriterInfo::DsetWriterInfo(hid_t _dset_id, hsize_t _extent) :
-  DsetInfo(_dset_id, _extent) {
+Dset::Dset(const Dset &o) :
+  m_id(o.id()),
+  m_file_space(o.file_space()),
+  m_mem_space(o.mem_space()),
+  m_dim(o.dim()),
+  m_file_select_start(o.m_file_select_start),
+  m_file_select_count(o.m_file_select_count),
+  m_file_select_stride(o.m_file_select_stride),
+  m_file_select_block(o.m_file_select_block)
+  // TODO - mem
+{  
 }
 
+Dset &Dset::operator=(const Dset &o) {
+  m_id = o.id();
+  m_file_space = o.file_space();
+  m_mem_space = o.mem_space();
+  m_dim = o.dim();
+  m_file_select_start = o.m_file_select_start;
+  m_file_select_count = o.m_file_select_count;
+  m_file_select_stride = o.m_file_select_stride;
+  m_file_select_block = o.m_file_select_block;  
+  // TODO - mem
+  return *this;
+}
+
+Dset::Dset(hid_t _id, hsize_t extent) : 
+  m_id(-1), 
+  m_file_space(-1),
+  m_mem_space(-1)
+{
+  std::vector<hsize_t> _dim(extent);
+  dim(_dim);
+}
+
+Dset::Dset(hid_t _id, const std::vector<hsize_t> & _dim) : 
+  m_id(-1), 
+  m_file_space(-1),
+  m_mem_space(-1)
+{
+  dim(_dim);
+}
+
+void Dset::dim(const std::vector<hsize_t> & _dim) 
+{
+  
+}
+
+/*
+// -------------------------------------------------------------------
+// Dset
+void Dset::close() {
+ // don't own id
+}
+
+// -------------------------------------------------------------------
+// DsetWriterInfo
+void DsetWriterInfo::close() {
+  Dset::close();
+  if (m_filespace > -1) {
+    NONNEG( H5Sclose( m_filespace ) );
+  }
+  if (m_mem_space > -1) {
+    NONNEG( H5Sclose( m_mem_space) );
+  }
+}
+
+DsetWriterInfo &DsetWriterInfo::operator=( DsetWriterInfo &o) {
+  Dset::operator=(o);
+  m_filespace = o.m_filespace;
+  m_mem_space = o.m_mem_space;
+  return *this;
+}
+
+DsetWriterInfo::DsetWriterInfo(hid_t _dset_i; std::vector<hsize_t> _dim) :
+  Dset(_dset_id, _dim)
+{
+  dim( _dim );
+}
+
+DsetWriterInfo::DsetWriterInfo(hid_t _dset_id, hsize_t _extent) :
+  Dset(_dset_id, _extent) {
+}
+
+// -------------------------------------------------------------------
 // DsetReaderInfo
 void DsetReaderInfo::close() {
   if (m_mem_space_id > -1) {
@@ -33,11 +101,11 @@ void DsetReaderInfo::close() {
   if (file_space_id() > -1) {
     NONNEG( H5Sclose( file_space_id() ) );
   }
-  DsetInfo::close();
+  Dset::close();
 }
 
 DsetReaderInfo::DsetReaderInfo( const DsetReaderInfo &o) :
-  DsetInfo(o),
+  Dset(o),
   m_mem_space_id(o.m_mem_space_id),
   m_file_space_id(o.m_file_space_id),
   m_file_select_start(o.m_file_select_start),
@@ -48,7 +116,7 @@ DsetReaderInfo::DsetReaderInfo( const DsetReaderInfo &o) :
 }
 
 DsetReaderInfo &DsetReaderInfo::operator=( DsetReaderInfo &o) {
-  DsetInfo::operator=(o);
+  Dset::operator=(o);
   m_mem_space_id = o.m_mem_space_id;
   m_file_space_id = o.m_file_space_id;
 
@@ -69,7 +137,7 @@ void DsetReaderInfo::dim(const std::vector<hsize_t> &new_dim) {
     mem_space_id(  NONNEG( H5Screate( H5S_SIMPLE ) ) );
   }
 
-  DsetInfo::dim(new_dim);
+  Dset::dim(new_dim);
 
   m_file_select_start = std::vector<hsize_t>(new_dim.size(), 0);
 
@@ -94,3 +162,5 @@ void DsetReaderInfo::file_space_select(int64_t event_index) {
                                &m_file_select_stride.at(0),
                                &m_file_select_block.at(0) ) );
 }
+*/
+

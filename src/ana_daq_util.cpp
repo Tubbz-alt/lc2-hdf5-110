@@ -54,6 +54,7 @@ namespace {
     fflush(stdout);
     hid_t dxpl_id = H5P_DEFAULT;
     unsigned index = 0;
+
     NONNEG( H5DOappend( dset_info.dset_id(), dxpl_id, index, num_elem, memtype, buffer ) );
     printf("append_many_to_dset - appended %ld\n", num_elem);
     fflush(stdout);

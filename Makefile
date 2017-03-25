@@ -14,8 +14,8 @@ bin/ana_daq_driver:
 	chmod a+x bin/ana_daq_driver
 
 #### LIB
-lib/liblc2daq.so: build/ana_daq_util.o build/daq_base.o build/H5OpenObjects.o build/VDSRoundRobin.o build/DsetInfo.o include/lc2daq.h 
-	$(CC) -shared $(LDFLAGS) build/ana_daq_util.o build/daq_base.o build/H5OpenObjects.o  build/VDSRoundRobin.o build/DsetInfo.o -o $@
+lib/liblc2daq.so: build/ana_daq_util.o build/daq_base.o build/H5OpenObjects.o build/VDSRoundRobin.o build/Dset.o include/lc2daq.h 
+	$(CC) -shared $(LDFLAGS) build/ana_daq_util.o build/daq_base.o build/H5OpenObjects.o  build/VDSRoundRobin.o build/Dset.o -o $@
 
 build/ana_daq_util.o: src/ana_daq_util.cpp include/ana_daq_util.h
 	$(CC) $(CFLAGS) src/ana_daq_util.cpp -o build/ana_daq_util.o
@@ -29,15 +29,15 @@ build/H5OpenObjects.o: src/H5OpenObjects.cpp include/H5OpenObjects.h
 build/daq_base.o: src/daq_base.cpp include/daq_base.h 
 	$(CC) $(CFLAGS) src/daq_base.cpp -o build/daq_base.o
 
-build/DsetInfo.o: src/DsetInfo.cpp include/DsetInfo.h include/check_macros.h
-	$(CC) $(CFLAGS) src/DsetInfo.cpp -o build/DsetInfo.o
+build/Dset.o: src/Dset.cpp include/Dset.h include/check_macros.h
+	$(CC) $(CFLAGS) src/Dset.cpp -o build/Dset.o
 
 ## header files
-include/lc2daq.h: include/check_macros.h include/DsetInfo.h include/ana_daq_util.h include/H5OpenObjects.h include/VDSRoundRobin.h
+include/lc2daq.h: include/check_macros.h include/Dset.h include/ana_daq_util.h include/H5OpenObjects.h include/VDSRoundRobin.h
 
-include/ana_daq_util.h: include/DsetInfo.h
+include/ana_daq_util.h: include/Dset.h
 
-include/DsetInfo.h:
+include/Dset.h:
 
 include/check_macros.h:
 
@@ -82,11 +82,21 @@ build/event_writer.o: src/event_writer.cpp
 build/test_vds_round_robin.o: test/test_vds_round_robin.cpp
 	$(CC) $(CFLAGS) $< -o $@
 
+build/test_Dset.o: test/test_Dset.cpp
+	$(CC) $(CFLAGS) $< -o $@
+
 ######### test/tests
 bin/test_vds_round_robin: build/test_vds_round_robin.o lib/liblc2daq.so
 	$(CC) $(LDFLAGS) -llc2daq -lyaml-cpp $< -o $@
 
-test: 
+bin/test_Dset: build/test_Dset.o build/Dset.o
+	$(CC) $(LDFLAGS) build/test_Dset.o build/Dset.o -o $@
+
+# TODO: add back test_vds_round_robin
+test: bin/test_Dset 
+	bin/test_Dset
+
+run_all: 
 	bin/daq_writer
 	bin/daq_master
 	bin/ana_reader_master
