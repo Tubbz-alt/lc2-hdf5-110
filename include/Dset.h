@@ -28,9 +28,9 @@ class Dset {
   std::vector<hsize_t> m_mem_select_block;
 
  public:
-  Dset();
-  Dset(const Dset &o);
-  Dset &operator=(const Dset &o);
+  Dset() = default;
+  Dset(const Dset &o) = default;
+  Dset &operator=(const Dset &o) = default;
 
   // custom constructors
   Dset(hid_t _id, hsize_t extent);
@@ -53,6 +53,10 @@ class Dset {
   void close();
   ~Dset() {};
 
+  void append(const std::vector<int64_t> &data);
+  void append(const std::vector<int16_t> &data);
+  
+  static Dset create(hid_t parent, const char *name, hid_t h5type, const std::vector<hsize_t> &chunk);
 };
 
 #endif

@@ -16,11 +16,11 @@ class DaqBase {
  protected:
 
   YAML::Node m_config;
-  YAML::Node m_group_config;
+  YAML::Node m_process_config;
 
   int m_id;
   
-  std::string m_group, 
+  std::string m_process, 
     m_basename, 
     m_fname_h5, 
     m_fname_pid, 
@@ -31,9 +31,9 @@ class DaqBase {
     m_cspad_group;
 
   typedef std::map<int, hid_t> TSubMap;
-  TSubMap m_small_id_to_number_group,
-    m_vlen_id_to_number_group,
-    m_cspad_id_to_number_group;
+  TSubMap m_small_map;
+  TSubMap m_vlen_map;
+  TSubMap m_cspad_map;
   
   std::chrono::time_point<Clock> m_t0, m_t1;
 
@@ -41,19 +41,18 @@ class DaqBase {
   void write_pid_file();
 
   void create_standard_groups(hid_t parent);
-  void create_number_groups(hid_t parent, TSubMap &name_to_group, int first, int count);
-  void close_number_groups(TSubMap &name_to_group);
+  void create_number_groups(hid_t parent, TSubMap &sub_map, int first, int count);
+  void close_number_groups(TSubMap &sub_map);
   void close_standard_groups();
   
-  std::string form_fullpath(std::string group, int idx, enum Location location);
+  std::string form_fullpath(std::string process, int idx, enum Location location);
 
-  static std::string form_basename(std::string group, int idx);
-  static hid_t get_dataset(hid_t fid_parent, const char *group1, int group2, const char *dsetname);
+  static std::string form_basename(std::string process, int idx);
 
   static void load_cspad(const std::string &h5_filename,
                          const std::string &dataset,
                          int length,
-                         std::vector<short> &cspad_buffer);
+                         std::vector<int16_t> &cspad_buffer);
   
  public:
 

@@ -2,7 +2,8 @@
 #define LC2DAQ_HH
 
 #include "check_macros.h"
-#include "DsetInfo.h"
+#include "DsetCreation.h"
+#include "Dset.h"
 #include "ana_daq_util.h"
 #include "H5OpenObjects.h"
 #include "VDSRoundRobin.h"

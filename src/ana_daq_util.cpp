@@ -7,55 +7,43 @@
 
 #include "check_macros.h"
 #include "ana_daq_util.h"
+#include "DsetCreation.h"
 
 
 namespace {
   
-  DsetWriterInfo create_dataset(hid_t parent, 
-                                const char *dset, 
-                                hid_t h5_type, 
-                                size_t type_size_bytes, 
-                                std::vector<hsize_t> one_chunk_dim) {
-    int rank = one_chunk_dim.size();
-    std::vector<hsize_t> current_dims(one_chunk_dim);
-    std::vector<hsize_t> maximum_dims(one_chunk_dim);
-    current_dims.at(0)=0;
-    maximum_dims.at(0) = H5S_UNLIMITED;
+  Dset create_dataset(hid_t parent, 
+                      const char *name, 
+                      hid_t h5_type, 
+                      std::vector<hsize_t> one_chunk_dim) {
+    hsize_t chunk = one_chunk_dim.at(0);
+    std::vector<hsize_t> start_dims(one_chunk_dim);
+    start_dims.at(0)=0;
+    DsetCreation dsetCreation( std::string(name), h5_type,  start_dims, chunk);
 
-    hid_t space_id = NONNEG( H5Screate_simple(rank, &current_dims.at(0), &maximum_dims.at(0)) );
-    hid_t plist_id = NONNEG( H5Pcreate(H5P_DATASET_CREATE) );
-    NONNEG(H5Pset_chunk(plist_id, rank, &one_chunk_dim.at(0)) );
-    
-    hid_t access_id = NONNEG( H5Pcreate(H5P_DATASET_ACCESS) );
-    
-    hsize_t num_elements_in_a_chunk = 1;
-    for (auto iter = one_chunk_dim.begin(); iter != one_chunk_dim.end(); ++iter) {
-      num_elements_in_a_chunk *= *iter;
-    }
-    hsize_t num_bytes_in_a_chunk = type_size_bytes * num_elements_in_a_chunk;
+    std::vector<hsize_t> max_dims(one_chunk_dim);
+    max_dims.at(0) = H5S_UNLIMITED;
 
-    size_t rdcc_nslots = 101;
-    size_t rdcc_nbytes = num_bytes_in_a_chunk * 3;
-    double rdcc_w0 = 0.75;
-    NONNEG(H5Pset_chunk_cache(access_id, rdcc_nslots, rdcc_nbytes, rdcc_w0) );
-    
-    hid_t h5_dset = NONNEG( H5Dcreate2(parent, dset, h5_type, space_id, H5P_DEFAULT, plist_id, access_id) );
+    hid_t space_id = NONNEG( H5Screate_simple(rank, &start_dims.at(0), &max_dims.at(0)) );
+    hid_t plist_id = dsetCreate.proplist;
+    hid_t access_id = dsetCreate.access;
+    hid_t h5_dset = NONNEG( H5Dcreate2(parent, name, h5_type, space_id, H5P_DEFAULT, plist_id, access_id) );
     
     NONNEG( H5Sclose(space_id) );
     NONNEG( H5Pclose(plist_id) );
     NONNEG( H5Pclose(access_id) );
     
-    return DsetWriterInfo(h5_dset, current_dims);
+    return Dset(h5_dset, start_dims);
   }
 
-  void append_many_to_dset(DsetWriterInfo &dset_info, size_t num_elem, 
+  void append_many_to_dset(Dset &dset, size_t num_elem, 
                            hid_t memtype, const void *buffer) {
-    printf("append_many_to_dset - start dset=%ld\n", dset_info.dset_id());
+    printf("append_many_to_dset - start dset=%ld\n", dset.dset_id());
     fflush(stdout);
     hid_t dxpl_id = H5P_DEFAULT;
     unsigned index = 0;
 
-    NONNEG( H5DOappend( dset_info.dset_id(), dxpl_id, index, num_elem, memtype, buffer ) );
+    NONNEG( H5DOappend( dset.dset_id(), dxpl_id, index, num_elem, memtype, buffer ) );
     printf("append_many_to_dset - appended %ld\n", num_elem);
     fflush(stdout);
   }
@@ -143,36 +131,38 @@ namespace {
 } // local namespace
 
 
-DsetWriterInfo create_1d_int64_dataset(hid_t parent, const char *dset, hsize_t chunk_size) {
+//----------------------------------------
+
+Dset create_1d_int64_dataset(hid_t parent, const char *name, hsize_t chunk_size) {
   std::vector<hsize_t> chunk_dim(1, chunk_size);
-  return create_dataset(parent, dset, H5T_NATIVE_INT64, 8, chunk_dim);
+  return create_dataset(parent, name, H5T_NATIVE_INT64, chunk_dim);
 }
 
 
-DsetWriterInfo create_4d_int16_dataset(hid_t parent, const char *dset,
-                                       hsize_t dim1, hsize_t dim2, hsize_t dim3, 
-                                       hsize_t chunk_size) {
+Dset create_4d_int16_dataset(hid_t parent, const char *name,
+                             hsize_t dim1, hsize_t dim2, hsize_t dim3, 
+                             hsize_t chunk_size) {
   std::vector<hsize_t> chunk_dim(4);
   chunk_dim.at(0)=chunk_size;
   chunk_dim.at(1)=dim1;
   chunk_dim.at(2)=dim2;
   chunk_dim.at(3)=dim3;
-  return create_dataset(parent, dset, H5T_NATIVE_INT16, 2, chunk_dim);
+  return create_dataset(parent, name, H5T_NATIVE_INT16, 2, chunk_dim);
 }
 
 
-void  append_many_to_1d_int64_dset(DsetWriterInfo &dset_info, hsize_t count, int64_t *data) {
-  append_many_to_dset(dset_info, count, H5T_NATIVE_INT64, data);
+void  append_many_to_1d_int64_dset(Dset &dset, hsize_t count, int64_t *data) {
+  append_many_to_dset(dset, count, H5T_NATIVE_INT64, data);
 }
 
 
-void append_to_1d_int64_dset(DsetWriterInfo &dset_info, int64_t value) {
-  append_many_to_dset(dset_info, 1, H5T_NATIVE_INT64, &value);
+void append_to_1d_int64_dset(Dset &dset, int64_t value) {
+  append_many_to_dset(dset, 1, H5T_NATIVE_INT64, &value);
 }
 
 
-void append_to_4d_int16_dset(DsetWriterInfo &dset_info, int16_t *data) {
-  append_many_to_dset(dset_info, 1, H5T_NATIVE_INT16, data);
+void append_to_4d_int16_dset(Dset &dset, int16_t *data) {
+  append_many_to_dset(dset, 1, H5T_NATIVE_INT16, data);
 }
 
 

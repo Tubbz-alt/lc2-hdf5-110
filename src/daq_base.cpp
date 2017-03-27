@@ -8,34 +8,34 @@
 #include "daq_base.h"
 
 
-DaqBase::DaqBase(int argc, char *argv[], const char *group) : m_group(group) {
+DaqBase::DaqBase(int argc, char *argv[], const char *process) : m_process(process) {
   if (argc != 3) {
-    std::cerr << "Usage: " << group << " takes 2 arguments: "<< std::endl;
+    std::cerr << "Usage: " << process << " takes 2 arguments: "<< std::endl;
     std::cerr << "       config.yaml"<< std::endl;
-    std::cerr << "       id within group"<< std::endl;
+    std::cerr << "       id within process"<< std::endl;
     throw std::runtime_error("Invalid command line arguments");
   }
 
   m_config = YAML::LoadFile(argv[1]);
-  m_group_config = m_config[group];
+  m_process_config = m_config[process];
   m_id = atoi(argv[2]);
 
-  m_basename = form_basename(m_group, m_id);
-  m_fname_h5 = form_fullpath(m_group, m_id, HDF5);
-  m_fname_pid = form_fullpath(m_group, m_id, PID);
-  m_fname_finished = form_fullpath(m_group, m_id, FINISHED);
+  m_basename = form_basename(m_process, m_id);
+  m_fname_h5 = form_fullpath(m_process, m_id, HDF5);
+  m_fname_pid = form_fullpath(m_process, m_id, PID);
+  m_fname_finished = form_fullpath(m_process, m_id, FINISHED);
 }
 
 
-std::string DaqBase::form_basename(std::string group, int idx) {
+std::string DaqBase::form_basename(std::string process, int idx) {
   static char idstr[128];
   sprintf(idstr, "%4.4d", idx);
-  return group + "-s" + idstr;
+  return process + "-s" + idstr;
 }
 
 
-std::string DaqBase::form_fullpath(std::string group, int idx, enum Location location) {
-  std::string basename = form_basename(group, idx);
+std::string DaqBase::form_fullpath(std::string process, int idx, enum Location location) {
+  std::string basename = form_basename(process, idx);
   std::string full_path = m_config["rootdir"].as<std::string>() + 
     "/" +
     m_config["rundir"].as<std::string>();
@@ -80,8 +80,8 @@ void DaqBase::write_pid_file() {
     std::cerr << "Could not create file: " << m_fname_pid << std::endl;
     throw std::runtime_error("FATAL - write_pid_file");
   }
-  fprintf(pid_f, "group=%s idx=%d hostname=%s pid=%d\n", 
-          m_group.c_str(), m_id, hostname, pid);
+  fprintf(pid_f, "process=%s idx=%d hostname=%s pid=%d\n", 
+          m_process.c_str(), m_id, hostname, pid);
   fclose(pid_f);
 }
 
@@ -93,12 +93,12 @@ void DaqBase::create_standard_groups(hid_t parent) {
 }
 
 
-void DaqBase::create_number_groups(hid_t parent, std::map<int, hid_t> &name_to_group, int first, int count) {
+void DaqBase::create_number_groups(hid_t parent, TSubMap &sub_map, int first, int count) {
   for (int name = first; name < (first + count); ++name) {
     char strname[128];
     sprintf(strname, "%5.5d", name);
     hid_t dset_group = NONNEG( H5Gcreate2(parent, strname, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT) );
-    name_to_group[name]=dset_group;
+    sub_map[name]=dset_group;
   } 
 }
 
@@ -118,23 +118,6 @@ void DaqBase::close_standard_groups() {
   NONNEG( H5Gclose( m_small_group ) );
 }
   
-
-hid_t DaqBase::get_dataset(hid_t fid, const char *group1, int group2, const char *dsetname) {
-  hid_t gid_group1 = NONNEG( H5Gopen2(fid, group1, H5P_DEFAULT) );
-
-  char group2str[128];
-  sprintf(group2str, "%5.5d", group2);
-  
-  hid_t gid_group2 = NONNEG( H5Gopen2(gid_group1, group2str, H5P_DEFAULT) );
-
-  hid_t dset = NONNEG( H5Dopen2(gid_group2, dsetname, H5P_DEFAULT) );
-
-  NONNEG( H5Gclose(gid_group2) );
-  NONNEG( H5Gclose(gid_group1) );
-
-  return dset;
-}
-
 
 void DaqBase::load_cspad(const std::string &h5_filename,
                          const std::string &dataset,

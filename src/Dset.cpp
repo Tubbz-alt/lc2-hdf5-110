@@ -1,41 +1,9 @@
 #include "Dset.h"
 #include "check_macros.h"
 
-Dset::Dset() : 
-  m_id(-1), 
-  m_file_space(-1),
-  m_mem_space(-1)
-{
-}
-
-Dset::Dset(const Dset &o) :
-  m_id(o.id()),
-  m_file_space(o.file_space()),
-  m_mem_space(o.mem_space()),
-  m_dim(o.dim()),
-  m_file_select_start(o.m_file_select_start),
-  m_file_select_count(o.m_file_select_count),
-  m_file_select_stride(o.m_file_select_stride),
-  m_file_select_block(o.m_file_select_block)
-  // TODO - mem
-{  
-}
-
-Dset &Dset::operator=(const Dset &o) {
-  m_id = o.id();
-  m_file_space = o.file_space();
-  m_mem_space = o.mem_space();
-  m_dim = o.dim();
-  m_file_select_start = o.m_file_select_start;
-  m_file_select_count = o.m_file_select_count;
-  m_file_select_stride = o.m_file_select_stride;
-  m_file_select_block = o.m_file_select_block;  
-  // TODO - mem
-  return *this;
-}
 
 Dset::Dset(hid_t _id, hsize_t extent) : 
-  m_id(-1), 
+  m_id(_id), 
   m_file_space(-1),
   m_mem_space(-1)
 {
@@ -44,7 +12,7 @@ Dset::Dset(hid_t _id, hsize_t extent) :
 }
 
 Dset::Dset(hid_t _id, const std::vector<hsize_t> & _dim) : 
-  m_id(-1), 
+  m_id(_id), 
   m_file_space(-1),
   m_mem_space(-1)
 {
@@ -53,8 +21,17 @@ Dset::Dset(hid_t _id, const std::vector<hsize_t> & _dim) :
 
 void Dset::dim(const std::vector<hsize_t> & _dim) 
 {
-  
 }
+
+Dset Dset::create(hid_t parent, const char *name, hid_t h5type, const std::vector<hsize_t> & chunk) {
+}
+
+void Dset::append(const std::vector<int64_t> & data) {
+}
+
+void Dset::append(const std::vector<int16_t> & data) {
+}
+
 
 /*
 // -------------------------------------------------------------------
