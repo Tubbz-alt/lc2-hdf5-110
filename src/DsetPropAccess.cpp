@@ -1,30 +1,26 @@
-#include "DsetCreation.h"
+#include "DsetPropAccess.h"
 #include "check_macros.h"
 
 
-DsetCreation::DsetCreation(std::string _name, hid_t _h5type, const std::vector<hsize_t> & _start_dims, hsize_t chunk) :
+DsetPropAccess::DsetPropAccess(std::string _name, hid_t _h5type, const std::vector<hsize_t> & _chunk_dims) :
   name(_name),
   h5type(_h5type),
   access(H5P_DEFAULT),
   proplist(H5P_DEFAULT),
-  start_dims(_start_dims)
+  chunk_dims(_chunk_dims)
 {
-  if (chunk > 0) {
-    std::vector<hsize_t> chunk_dims(_start_dims);
-    chunk_dims.at(0)=chunk;
-    int rank = chunk_dims.size();
-    hid_t new_plist = NONNEG( H5Pcreate(H5P_DATASET_CREATE) );
-    NONNEG( H5Pset_chunk(new_plist, rank, &chunk_dims.at(0)) );
-    proplist = new_plist;
-    size_t type_size_bytes = NONNEG( H5Tget_size( h5type ) );
-    access = create_access_for_chunk_cache(chunk_dims, type_size_bytes);
-  }
+  int rank = int(chunk_dims.size());
+  hid_t new_plist = NONNEG( H5Pcreate(H5P_DATASET_CREATE) );
+  NONNEG( H5Pset_chunk(new_plist, rank, &chunk_dims.at(0)) );
+  proplist = new_plist;
+  access = create_access_for_chunk_cache();
 }
 
 
-hid_t DsetCreation::create_access_for_chunk_cache(const std::vector<hsize_t> &chunk_dims, size_t type_size_bytes) {
+hid_t DsetPropAccess::create_access_for_chunk_cache() {
   hid_t new_access = NONNEG( H5Pcreate(H5P_DATASET_ACCESS) );
-    
+  size_t type_size_bytes = NONNEG( H5Tget_size( h5type ) );
+
   hsize_t num_elements_in_a_chunk = 1;
   for (auto iter = chunk_dims.begin(); iter != chunk_dims.end(); ++iter) {
     num_elements_in_a_chunk *= *iter;
@@ -39,7 +35,7 @@ hid_t DsetCreation::create_access_for_chunk_cache(const std::vector<hsize_t> &ch
 }
 
 
-void DsetCreation::close() {
+void DsetPropAccess::close() {
   if (proplist != H5P_DEFAULT) {
     NONNEG( H5Pclose( proplist ) );
     proplist = H5P_DEFAULT;
