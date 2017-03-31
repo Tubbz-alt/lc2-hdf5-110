@@ -1,7 +1,32 @@
+#include <iostream>
+
 #include "DsetPropAccess.h"
 #include "Dset.h"
 #include "check_macros.h"
 
+
+void print_h5space(std::ostream &ostr, const char *header, hid_t space) {
+  htri_t is_simple = H5Sis_simple(space);
+  ostr << header << ": is_simple=" << is_simple;
+
+  if (is_simple < 1) return;
+  int ndims = H5Sget_simple_extent_ndims(space);
+
+  htri_t is_reg_hyper = H5Sis_regular_hyperslab(space);
+  ostr << " is_reg_hyper=" << is_reg_hyper;
+
+  if (is_reg_hyper >= 1) {
+    std::vector<hsize_t> start(ndims), count(ndims), stride(ndims), block(ndims);
+    H5Sget_regular_hyperslab(space, &start.at(0), &stride.at(0), &count.at(0), &block.at(0));
+    ostr << " start=" << start << " count=" << count << " stride=" << stride << " block=" << block;
+  } else {
+    std::vector<hsize_t> dims(ndims);
+    H5Sget_simple_extent_dims(space, &dims.at(0), NULL );
+    ostr << " dims=" << dims;
+  }
+  ostr << std::endl;
+  ostr.flush();
+}
 
 Dset Dset::create(hid_t parent, const char *name, hid_t h5type, const std::vector<hsize_t> & chunk) {
   std::vector<hsize_t> start_dims(chunk);
@@ -85,8 +110,19 @@ void Dset::close() {
   NONNEG( H5Dclose( m_id) );
 }
 
+void Dset::check_read(hid_t type, hsize_t start, hsize_t count) {
+  if ( H5Tequal(m_type, type) <= 0) {
+    throw std::runtime_error("dset::read, type mismatch");
+  }
+  if ((start < 0) or (count < 0)) {
+    throw std::runtime_error("dset::read - start or count is negative");
+  }
+  if (start+count > m_dim.at(0)) {
+    throw std::runtime_error("dset::read - start+count to big for dset");
+  }
+}
 
-void Dset::check_append(hid_t type, hsize_t count, size_t data_len) {
+  void Dset::check_append(hid_t type, hsize_t count, size_t data_len) {
   if ( H5Tequal(m_type, type) <= 0) {
     throw std::runtime_error("dset::append, type mismatch");
   }
@@ -112,12 +148,16 @@ void Dset::generic_append(hsize_t count, const void *data) {
   NONNEG( H5Dset_extent(m_id, &m_dim[0]));
 
   hid_t filespace = NONNEG( H5Dget_space(m_id) );
+  std::cout << "start=" << start << "end=" << count << std::endl;
   file_space_select(filespace, start, count);
 
   std::vector<hsize_t > mem_dims(m_dim);
   mem_dims.at(0)=count;
 
-  hid_t memspace = NONNEG( H5Screate_simple(m_dim.size(), &mem_dims.at(0), NULL));
+  hid_t memspace = NONNEG( H5Screate_simple(int(mem_dims.size()), &mem_dims.at(0), &mem_dims.at(0)));
+  NONNEG( H5Sselect_all(memspace));
+ // print_h5space(std::cout, "filespace", filespace);
+//  print_h5space(std::cout, "memspace", memspace);
 
   NONNEG( H5Dwrite(m_id, m_type, memspace, filespace, H5P_DEFAULT, data));
 
@@ -136,12 +176,36 @@ void Dset::append(hsize_t count, const std::vector<int64_t> &data) {
   generic_append(count, &data.at(0));
 }
 
+void Dset::generic_read(hsize_t start, hsize_t count, void *data) {
+  hid_t filespace = NONNEG( H5Dget_space(m_id) );
+  file_space_select(filespace, start, count);
+
+  std::vector<hsize_t > mem_dims(m_dim);
+  mem_dims.at(0)=count;
+
+  hid_t memspace = NONNEG( H5Screate_simple(int(mem_dims.size()), &mem_dims.at(0), &mem_dims.at(0)));
+  NONNEG( H5Sselect_all(memspace));
+  // print_h5space(std::cout, "filespace", filespace);
+  // print_h5space(std::cout, "memspace", memspace);
+
+  NONNEG( H5Dread(m_id, m_type, memspace, filespace, H5P_DEFAULT, data));
+
+  NONNEG(H5Sclose(filespace));
+  NONNEG(H5Sclose(memspace));
+
+}
 
 void Dset::read(hsize_t start, hsize_t count, std::vector<int64_t> &data) {
+  check_read(H5T_NATIVE_INT64, start, count);
+  data.resize(count);
+  generic_read(start, count, &data.at(0));
 }
 
 
 void Dset::read(hsize_t start, hsize_t count, std::vector<int16_t> &data) {
+  check_read(H5T_NATIVE_INT16, start, count);
+  data.resize(count);
+  generic_read(start, count, &data.at(0));
 }
 
 
@@ -154,10 +218,10 @@ void Dset::file_space_select(hid_t file_space, hsize_t start, hsize_t count) {
   count_sel.at(0) = count;
   NONNEG(H5Sselect_hyperslab(file_space,
                              H5S_SELECT_SET,
-                             &start_sel.at(0),
-                             &count_sel.at(0),
-                             &stride.at(0),
-                             &block.at(0)));
+                             &start_sel.at(0),  // start,0,0,0
+                             &stride.at(0),     // 1,1,1,1
+                             &count_sel.at(0),  // count,1,1,1
+                             &block.at(0)));    // 1,dim,dim,dim
 }
 
 /*

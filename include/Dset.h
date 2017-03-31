@@ -4,7 +4,18 @@
 #include <vector>
 #include "hdf5.h"
 
+// utility functions:
+template <class T>
+std::ostream & operator<<(std::ostream &ostr, const std::vector<T> &vec) {
+  for (auto iter=vec.begin(); iter != vec.end(); ++iter) {
+    ostr << *iter <<',';
+  }
+  return ostr;
+}
 
+void print_h5space(std::ostream &ostr, const char *header, hid_t space);
+
+// main class
 class Dset {
   // wrap pieces used for appending/reading N events to datasets. 
   // Cache some things for these operations
@@ -15,8 +26,10 @@ class Dset {
 
 protected:
   void check_append(hid_t type, hsize_t count, size_t data_len);
+  void check_read(hid_t type, hsize_t start, hsize_t count);
   void file_space_select(hid_t file_space, hsize_t start, hsize_t count);
   void generic_append(hsize_t count, const void *data);
+  void generic_read(hsize_t start, hsize_t count, void *data);
 
 public:
   Dset() = default;

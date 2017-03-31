@@ -1,3 +1,4 @@
+#include <iostream>
 #include "check_macros.h"
 #include "Dset.h"
 
@@ -17,12 +18,20 @@ void write_file() {
   Dset dset = Dset::create(fid, "dsetA", H5T_NATIVE_INT64, chunk);
   std::vector<int64_t> data = {3,4,5};
   dset.append(3, data);
+  dset.append(3, data);
+  dset.append(3, data);
   dset.close();
   NONNEG(H5Fclose(fid));
 }
 
 
 void read_file() {
+  hid_t fid = H5Fopen("test_Dset.h5",H5P_DEFAULT, H5P_DEFAULT);
+  Dset dset = Dset::open(fid, "dsetA");
+  std::vector<int64_t> buf;
+  dset.read(0,9,buf);
+  std::cout << "read  back: "  << buf << std::endl;
+  dset.close();
 }
 
 
