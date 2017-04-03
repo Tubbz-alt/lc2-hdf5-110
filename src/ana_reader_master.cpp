@@ -50,11 +50,6 @@ class AnaReaderMaster : public DaqBase {
   hid_t m_master_fid;
   hid_t m_output_fid;
 
-  // map "fiducials", "data", etc to AnaReaderDsetInfo
-  typedef std::map<std::string, DsetReaderInfo> DsetName2Info;
-
-  // map group numbers, i.e, 00000, to above
-  typedef std::map<int, DsetName2Info> DsetNumber2GroupInfo;
 
   // map "small", "vlen", etc, to above
   std::map<std::string, DsetNumber2GroupInfo> m_topGroups;
