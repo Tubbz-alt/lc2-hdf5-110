@@ -22,7 +22,7 @@ class Dset {
 
   hid_t m_id;
   hid_t m_type;
-  std::vector<hsize_t> m_dim;
+  std::vector<hsize_t> m_dims;
 
 protected:
   void check_append(hid_t type, hsize_t count, size_t data_len);
@@ -39,7 +39,7 @@ public:
 
   // accessors
   hid_t id() const { return m_id; }
-  const std::vector<hsize_t> & dim() const { return m_dim; }
+  const std::vector<hsize_t> & dim() const { return m_dims; }
 
   // close/cleanup
   void close();
@@ -49,6 +49,8 @@ public:
 
 	void read(hsize_t start, hsize_t count, std::vector<int64_t> &data);
 	void read(hsize_t start, hsize_t count, std::vector<int16_t> &data);
+
+  bool wait(hsize_t len_to_grow_to, int microseconds_to_pause, int timeout_seconds);
 
   static Dset create(hid_t parent, const char *name, hid_t h5type, const std::vector<hsize_t> &chunk);
   static Dset open(hid_t parent, const char *name);

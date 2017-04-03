@@ -2,54 +2,70 @@ PREFIX=/reg/neh/home/davidsch/.conda/envs/lc2
 CC=g++
 CFLAGS=--std=c++11 -c -Wall -Iinclude -I$(PREFIX)/include -fPIC
 
-LDFLAGS=-L$(PREFIX)/lib -Llib -Wl,--enable-new-dtags -Wl,-rpath='$$ORIGIN:$$ORIGIN/../lib:$(PREFIX)/lib' -lmpi -lmpi_cxx -lhdf5 -lhdf5_hl -lhdf5_cpp -lsz -lopen-rte -lopen-pal
+HDF5_LIBS=-lmpi -lmpi_cxx -lhdf5 -lhdf5_hl -lhdf5_cpp -lsz -lopen-rte -lopen-pal
+XTRA_LIBS=-lyaml-cpp
+
+LDFLAGS=-L$(PREFIX)/lib -Llib -Wl,--enable-new-dtags -Wl,-rpath='$$ORIGIN:$$ORIGIN/../lib:$(PREFIX)/lib' $(HDF5_LIBS)
 
 .PHONY: all clean
 
-all: lib/liblc2daq.so bin/daq_writer bin/daq_master bin/ana_reader_master bin/ana_reader_stream bin/ana_daq_driver
+APPS=bin/daq_writer bin/daq_master bin/ana_reader_master bin/ana_reader_stream bin/ana_daq_driver
 
-#### DRIVER
+TESTS=bin/test_Dset bin/test_vds_round_robin
+
+LIBS=lib/liblc2daq.so
+
+PYTHON_SCRIPTS=bin/ana_daq_driver
+
+all: $(LIBS) $(APPS) $(TESTS) $(PYTHON_SCRIPTS)
+
+#### PYTHON SCRIPTS
 bin/ana_daq_driver:
 	ln -s ../python/ana_daq_driver.py bin/ana_daq_driver
 	chmod a+x bin/ana_daq_driver
 
-#### LIB
-lib/liblc2daq.so: build/ana_daq_util.o build/daq_base.o build/H5OpenObjects.o build/VDSRoundRobin.o build/Dset.o build/DsetPropAccess.o include/lc2daq.h
-	$(CC) -shared $(LDFLAGS) build/ana_daq_util.o build/daq_base.o build/H5OpenObjects.o  build/VDSRoundRobin.o build/Dset.o -o $@
+#### LIBS
+LIB_OBJS=build/DaqBase.o  build/Dset.o  build/DsetPropAccess.o  build/H5OpenObjects.o  build/VDSRoundRobin.o
+LIB_USER_HEADERS=include/lc2daq.h
 
-build/ana_daq_util.o: src/ana_daq_util.cpp include/ana_daq_util.h
-	$(CC) $(CFLAGS) src/ana_daq_util.cpp -o build/ana_daq_util.o
+lib/liblc2daq.so: $(LIB_OBJS) $(LIB_USER_HEADERS)
+	$(CC) -shared $(LDFLAGS) $(LIB_OBJS) -o $@
 
-build/VDSRoundRobin.o: src/VDSRoundRobin.cpp include/VDSRoundRobin.h 
-	$(CC) $(CFLAGS) src/VDSRoundRobin.cpp -o build/VDSRoundRobin.o
+build/DaqBase.o: src/DaqBase.cpp include/DaqBase.h include/check_macros.h
+	$(CC) $(CFLAGS) src/DaqBase.cpp -o build/DaqBase.o
 
-build/H5OpenObjects.o: src/H5OpenObjects.cpp include/H5OpenObjects.h
-	$(CC) $(CFLAGS) src/H5OpenObjects.cpp -o build/H5OpenObjects.o
-
-build/daq_base.o: src/daq_base.cpp include/daq_base.h 
-	$(CC) $(CFLAGS) src/daq_base.cpp -o build/daq_base.o
-
-build/Dset.o: src/Dset.cpp include/Dset.h include/check_macros.h
+build/Dset.o: src/Dset.cpp include/Dset.h include/check_macros.h include/DsetPropAccess.h
 	$(CC) $(CFLAGS) src/Dset.cpp -o build/Dset.o
 
 build/DsetPropAccess.o: src/DsetPropAccess.cpp include/DsetPropAccess.h include/check_macros.h
 	$(CC) $(CFLAGS) src/DsetPropAccess.cpp -o build/DsetPropAccess.o
 
-## header files
-include/lc2daq.h: include/check_macros.h include/Dset.h include/ana_daq_util.h include/H5OpenObjects.h include/VDSRoundRobin.h
+build/H5OpenObjects.o: src/H5OpenObjects.cpp include/H5OpenObjects.h
+	$(CC) $(CFLAGS) src/H5OpenObjects.cpp -o build/H5OpenObjects.o
 
-include/ana_daq_util.h: include/Dset.h
+build/VDSRoundRobin.o: src/VDSRoundRobin.cpp include/VDSRoundRobin.h 
+	$(CC) $(CFLAGS) src/VDSRoundRobin.cpp -o build/VDSRoundRobin.o
+
+
+## header files
+include/lc2daq.h: include/check_macros.h include/Dset.h include/DsetPropAccess.h include/H5OpenObjects.h include/VDSRoundRobin.h
+
+include/DaqBase.h:
 
 include/Dset.h:
 
-include/check_macros.h:
+include/DsetPropAccess.h:
 
-include/daq_base.h: include/lc2daq.h
+include/H5OpenObjects.h:
+
+include/VDSRoundRobin.h:
+
+include/check_macros.h:
 
 
 #### DAQ WRITER RAW/STREAM
 bin/daq_writer: build/daq_writer.o lib/liblc2daq.so
-	$(CC) $(LDFLAGS) -llc2daq -lyaml-cpp $< -o $@
+	$(CC) $(LDFLAGS) -llc2daq $< -o $@
 
 build/daq_writer.o: src/daq_writer.cpp 
 	$(CC) $(CFLAGS) $< -o $@
@@ -62,10 +78,10 @@ build/daq_master.o: src/daq_master.cpp
 	$(CC) $(CFLAGS)  $< -o $@
 
 #### ANA READ MASTER
-bin/ana_reader_master: build/ana_reader_master.o lib/liblc2daq.so
-	$(CC) $(LDFLAGS) -llc2daq -lyaml-cpp $< -o $@
+bin/ana_reader_master: build/ana_reader_master.o lib/liblc2daq.so include/DaqBase.h
+	$(CC) $(LDFLAGS) -llc2daq  $< -o $@
 
-build/ana_reader_master.o: src/ana_reader_master.cpp
+build/ana_reader_master.o: app/ana_reader_master.cpp
 	$(CC) $(CFLAGS) $< -o $@
 
 #### ANA READ STREAM
@@ -99,14 +115,8 @@ bin/test_Dset: build/test_Dset.o build/Dset.o
 test: bin/test_Dset 
 	bin/test_Dset
 
-run_all: 
-	bin/daq_writer
-	bin/daq_master
-	bin/ana_reader_master
-	bin/ana_reader_stream
-	bin/ana_daq_driver
 
 #### clean
 clean:
-	rm lib/liblc2daq.so build/*.o bin/daq_writer bin/daq_master bin/ana_reader_master bin/ana_reader_stream bin/ana_daq_driver
+	rm lib/*.so build/*.o bin/*
 

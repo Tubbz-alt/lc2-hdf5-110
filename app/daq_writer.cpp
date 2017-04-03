@@ -8,7 +8,7 @@
 #include <vector>
 #include <map>
 
-#include "daq_base.h"
+#include "DaqBase.h"
 
 
 class DaqWriter : public DaqBase {

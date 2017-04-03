@@ -9,29 +9,8 @@
 #include <stdint.h>
 
 #include "lc2daq.h"
-#include "daq_base.h"
+#include "DaqBase.h"
 #include "hdf5_hl.h"
-
-
-std::map<std::string, std::vector<std::string> > get_top_group_to_final_dsets() {
-  std::map<std::string, std::vector<std::string> > group2dsets;
-  std::vector<std::string> not_vlen, vlen;
-  not_vlen.push_back(std::string("fiducials"));
-  not_vlen.push_back(std::string("data"));
-  not_vlen.push_back(std::string("nano"));
-  
-  vlen.push_back(std::string("fiducials"));
-  vlen.push_back(std::string("blob"));
-  vlen.push_back(std::string("blobcount"));
-  vlen.push_back(std::string("blobstart"));
-  vlen.push_back(std::string("nano"));
-  
-  group2dsets[std::string("small")] = not_vlen;
-  group2dsets[std::string("cspad")] = not_vlen;
-  group2dsets[std::string("vlen")] = vlen;
-
-  return group2dsets;
-}
 
 
 class AnaReaderMaster : public DaqBase {
@@ -51,14 +30,7 @@ class AnaReaderMaster : public DaqBase {
   hid_t m_output_fid;
 
 
-  // map "small", "vlen", etc, to above
-  std::map<std::string, DsetNumber2GroupInfo> m_topGroups;
-
-  // map "small", "vlen", "cspad" to the list of dsets, ie ["fiducials", "blobdata", ...]
-  std::map<std::string, std::vector<std::string> > m_group2dsets;
-
-  // map "small" -> 100, "vlen" -> 80, i.e, the total number of subgroups in the master
-  std::map<std::string, size_t> m_top_group_2_num_subgroups;
+  std::map<std::string, int> m_top_group_2_num_subgroups;
 
   // map "small" -> 1 if they appear on every shot, etc
   std::map<std::string, int> m_rates;
@@ -68,32 +40,6 @@ class AnaReaderMaster : public DaqBase {
 
   std::vector<uint8_t> m_event_data;
 
-  // examples of access
-  //     get at a specific dset
-  //   m_topGroups["small"][0]["fiducials"].dset_id
-  //                                       .dims
-  //
-  //   loop over all numbered dsets for a top group/ dset name
-  // for (int sub=0; sub < m_top_group_2_num_subgroups["small"]; ++sub) {
-  //      m_topGroups["small"][sub]["fiducials"]
-  //
-  //   loop over all numbers/dsets for a top group
-  // for (int sub=0; sub < m_top_group_2_num_subgroups["small"]; ++sub) {
-  //   for (auto dsetNameIter = m_group2dsets["small"].begin(); 
-  //        dsetNameIter ! m_group2dsets["small"].end(); ++dsetNameIter) {
-  //        m_topGroups["small"][sub][*dsetNameIter]
-  //
-  //   loop over everything
-  // for (auto topIter = m_top_group_2_num_subgroups.begin();
-  //      topIter != m_top_group_2_num_subgroups.end(); ++topIter) {
-  //    std::string topName = topIter->first;
-  //    size_t numSub = topIter->second;
-  //    for (int sub=0; sub < numSub; ++sub) {
-  //       for (auto dsetNameIter = m_group2dsets[topName].begin(); 
-  //        dsetNameIter ! m_group2dsets[topName].end(); ++dsetNameIter) {
-  //          m_topGroups[topName][sub][*dsetNameIter]
-  //
-  // }
 
 protected:
   void wait_for_SWMR_access_to_master();
@@ -131,9 +77,6 @@ AnaReaderMaster::AnaReaderMaster(int argc, char *argv[])
 {  
   m_master_fname = DaqBase::form_fullpath("daq_master", m_id, HDF5);
   m_output_fname = DaqBase::form_fullpath("ana_reader_master", m_id, HDF5);
-
-  // will set to "small" -> ["fiducials", "nano", "data"] ...
-  m_group2dsets = get_top_group_to_final_dsets();
 
   m_top_group_2_num_subgroups[std::string("small")] = m_num_small_per_writer * m_num_writers;
   m_top_group_2_num_subgroups[std::string("vlen")] = m_num_vlen_per_writer * m_num_writers;
@@ -247,17 +190,17 @@ void AnaReaderMaster::analysis_loop() {
 
 void AnaReaderMaster::initialize_dset_info() {
   char dset_path[512];
+  // HERE XXXXXXXXXXX
   
   for (auto iter = m_group2dsets.begin(); iter != m_group2dsets.end(); ++iter) {
-    auto topGroup = iter->first;
+    auto topGroup = iter->first;   // 'small'
     auto dsetList = iter->second;
     int num_events_in_dataset_chunk_cache = m_events_per_dataset_chunkcache[topGroup];
 
-    m_topGroups[topGroup] = DsetNumber2GroupInfo();
+    m_topGroups[topGroup] = Number2Dsets();
     size_t num_sub_groups = m_top_group_2_num_subgroups[topGroup];
 
     for (size_t sub_group=0; sub_group < num_sub_groups; ++sub_group) {
-      m_topGroups[topGroup][sub_group] = DsetName2Info();
       for (auto dsetIter = dsetList.begin(); dsetIter != dsetList.end(); ++dsetIter) {
         auto dsetName = *dsetIter;
         sprintf(dset_path, "/%s/%5.5ld/%s", topGroup.c_str(), sub_group, dsetName.c_str());

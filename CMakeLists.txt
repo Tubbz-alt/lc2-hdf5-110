@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.3)
+cmake_minimum_required(VERSION 3.6)
 project(lc2-hdf5-110)
 
 set(CMAKE_CXX_STANDARD 11)

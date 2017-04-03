@@ -5,7 +5,7 @@
 #include <stdexcept>
 
 #include "check_macros.h"
-#include "daq_base.h"
+#include "DaqBase.h"
 
 
 DaqBase::DaqBase(int argc, char *argv[], const char *process) : m_process(process) {
@@ -24,6 +24,10 @@ DaqBase::DaqBase(int argc, char *argv[], const char *process) : m_process(proces
   m_fname_h5 = form_fullpath(m_process, m_id, HDF5);
   m_fname_pid = form_fullpath(m_process, m_id, PID);
   m_fname_finished = form_fullpath(m_process, m_id, FINISHED);
+
+  // will set to "small" -> ["fiducials", "nano", "data"] ...
+  m_group2dsets = get_top_group_to_final_dsets();
+
 }
 
 

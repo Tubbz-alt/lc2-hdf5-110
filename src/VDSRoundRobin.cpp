@@ -1,7 +1,6 @@
 #include <algorithm>
 
 #include "VDSRoundRobin.h"
-#include "ana_daq_util.h"
 #include "check_macros.h"
 
 VDSRoundRobin::VDSRoundRobin(hid_t vds_location,
