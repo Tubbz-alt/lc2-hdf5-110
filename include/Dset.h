@@ -4,59 +4,54 @@
 #include <vector>
 #include "hdf5.h"
 
+// utility functions:
+template <class T>
+std::ostream & operator<<(std::ostream &ostr, const std::vector<T> &vec) {
+  for (auto iter=vec.begin(); iter != vec.end(); ++iter) {
+    ostr << *iter <<',';
+  }
+  return ostr;
+}
 
+void print_h5space(std::ostream &ostr, const char *header, hid_t space);
+
+// main class
 class Dset {
   // wrap pieces used for appending/reading N events to datasets. 
   // Cache some things for these operations
 
   hid_t m_id;
   hid_t m_type;
-  hid_t m_file_space;
-  hid_t m_mem_space;
-
   std::vector<hsize_t> m_dim;
 
-  std::vector<hsize_t> m_file_select_start;
-  std::vector<hsize_t> m_file_select_count;
-  std::vector<hsize_t> m_file_select_stride;
-  std::vector<hsize_t> m_file_select_block;
+protected:
+  void check_append(hid_t type, hsize_t count, size_t data_len);
+  void check_read(hid_t type, hsize_t start, hsize_t count);
+  void file_space_select(hid_t file_space, hsize_t start, hsize_t count);
+  void generic_append(hsize_t count, const void *data);
+  void generic_read(hsize_t start, hsize_t count, void *data);
 
-  // will always be maintained for a contigous block
-  std::vector<hsize_t> m_mem_select_start;
-  std::vector<hsize_t> m_mem_select_count;
-  std::vector<hsize_t> m_mem_select_stride;
-  std::vector<hsize_t> m_mem_select_block;
-
- public:
+public:
   Dset() = default;
   Dset(const Dset &o) = default;
   Dset &operator=(const Dset &o) = default;
-
-  // custom constructors
-  Dset(hid_t _id, hsize_t extent);
-  Dset(hid_t _id, const std::vector<hsize_t> & _dim);
+  ~Dset() {};
 
   // accessors
   hid_t id() const { return m_id; }
-  hid_t mem_space() const { return m_mem_space; }
-  hid_t file_space() const { return m_file_space; }
   const std::vector<hsize_t> & dim() const { return m_dim; }
-
-  // reset the dimensions, updates the filespace
-  void dim(const std::vector<hsize_t> &_dim);
-
-  // these will trigger resetting the memspace as well, for 1 or count
-  void file_space_select(int64_t event_index);
-  void file_space_select(int64_t event_index_start, int64_t count);
 
   // close/cleanup
   void close();
-  ~Dset() {};
 
-  void append(const std::vector<int64_t> &data);
-  void append(const std::vector<int16_t> &data);
-  
+  void append(hsize_t count, const std::vector<int64_t> &data);
+  void append(hsize_t count, const std::vector<int16_t> &data);
+
+	void read(hsize_t start, hsize_t count, std::vector<int64_t> &data);
+	void read(hsize_t start, hsize_t count, std::vector<int16_t> &data);
+
   static Dset create(hid_t parent, const char *name, hid_t h5type, const std::vector<hsize_t> &chunk);
+  static Dset open(hid_t parent, const char *name);
 };
 
 #endif

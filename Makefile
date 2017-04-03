@@ -14,7 +14,7 @@ bin/ana_daq_driver:
 	chmod a+x bin/ana_daq_driver
 
 #### LIB
-lib/liblc2daq.so: build/ana_daq_util.o build/daq_base.o build/H5OpenObjects.o build/VDSRoundRobin.o build/Dset.o build/DsetCreation.o include/lc2daq.h 
+lib/liblc2daq.so: build/ana_daq_util.o build/daq_base.o build/H5OpenObjects.o build/VDSRoundRobin.o build/Dset.o build/DsetPropAccess.o include/lc2daq.h
 	$(CC) -shared $(LDFLAGS) build/ana_daq_util.o build/daq_base.o build/H5OpenObjects.o  build/VDSRoundRobin.o build/Dset.o -o $@
 
 build/ana_daq_util.o: src/ana_daq_util.cpp include/ana_daq_util.h
@@ -32,8 +32,8 @@ build/daq_base.o: src/daq_base.cpp include/daq_base.h
 build/Dset.o: src/Dset.cpp include/Dset.h include/check_macros.h
 	$(CC) $(CFLAGS) src/Dset.cpp -o build/Dset.o
 
-build/DsetCreation.o: src/DsetCreation.cpp include/DsetCreation.h include/check_macros.h
-	$(CC) $(CFLAGS) src/DsetCreation.cpp -o build/DsetCreation.o
+build/DsetPropAccess.o: src/DsetPropAccess.cpp include/DsetPropAccess.h include/check_macros.h
+	$(CC) $(CFLAGS) src/DsetPropAccess.cpp -o build/DsetPropAccess.o
 
 ## header files
 include/lc2daq.h: include/check_macros.h include/Dset.h include/ana_daq_util.h include/H5OpenObjects.h include/VDSRoundRobin.h
