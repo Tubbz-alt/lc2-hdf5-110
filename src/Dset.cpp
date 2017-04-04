@@ -254,6 +254,13 @@ bool Dset::wait(hsize_t len_to_grow_to, int microseconds_to_pause, int timeout_s
   
 }
 
+void Dset::close() {
+  if (m_id >= 0) {
+    NONNEG( H5Dclose( m_id) );
+    m_id = -1;
+  }
+}
+
 /*
 void Dset::increase_extent(hsize_t extend) {
   m_dims.at(0) += extend;

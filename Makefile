@@ -1,11 +1,17 @@
 PREFIX=/reg/neh/home/davidsch/.conda/envs/lc2
-CC=g++
-CFLAGS=--std=c++11 -c -Wall -Iinclude -I$(PREFIX)/include -fPIC
 
+CC=g++
+SHARED=-shared
+
+#CC=h5c++
+#SHARED=-shlib
+
+CFLAGS=--std=c++11 -c -Wall -Iinclude -I$(PREFIX)/include -fPIC
 HDF5_LIBS=-lmpi -lmpi_cxx -lhdf5 -lhdf5_hl -lhdf5_cpp -lsz -lopen-rte -lopen-pal
+#HDF5_LIBS=
 XTRA_LIBS=-lyaml-cpp
 
-LDFLAGS=-L$(PREFIX)/lib -Llib -Wl,--enable-new-dtags -Wl,-rpath='$$ORIGIN:$$ORIGIN/../lib:$(PREFIX)/lib' $(HDF5_LIBS)
+LDFLAGS=-L$(PREFIX)/lib -Llib -Wl,--enable-new-dtags -Wl,-rpath='$$ORIGIN:$$ORIGIN/../lib:$(PREFIX)/lib' $(HDF5_LIBS) $(XTRA_LIBS)
 
 .PHONY: all clean
 
@@ -29,7 +35,7 @@ LIB_OBJS=build/DaqBase.o  build/Dset.o  build/DsetPropAccess.o  build/H5OpenObje
 LIB_USER_HEADERS=include/lc2daq.h
 
 lib/liblc2daq.so: $(LIB_OBJS) $(LIB_USER_HEADERS)
-	$(CC) -shared $(LDFLAGS) $(LIB_OBJS) -o $@
+	$(CC) $(SHARED) $(LDFLAGS) $(LIB_OBJS) -o $@
 
 build/DaqBase.o: src/DaqBase.cpp include/DaqBase.h include/check_macros.h
 	$(CC) $(CFLAGS) src/DaqBase.cpp -o build/DaqBase.o
