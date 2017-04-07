@@ -193,16 +193,17 @@ void AnaReaderMaster::initialize_dsets() {
   
   for (auto iter = m_group2dsets.begin(); iter != m_group2dsets.end(); ++iter) {
     auto topGroup = iter->first;   // 'small'
-    auto dsetList = iter->second;
+    auto dsetNames = iter->second;
     //    int num_events_in_dataset_chunk_cache = m_events_per_dataset_chunkcache[topGroup];
 
     m_topGroups[topGroup] = Number2Dsets();
     size_t num_sub_groups = m_top_group_2_num_subgroups[topGroup];
 
     for (size_t sub_group=0; sub_group < num_sub_groups; ++sub_group) {
-      for (auto dsetIter = dsetList.begin(); dsetIter != dsetList.end(); ++dsetIter) {
+      for (auto dsetIter = dsetNames.begin(); dsetIter != dsetNames.end(); ++dsetIter) {
         auto dsetName = *dsetIter;
         sprintf(dset_path, "/%s/%5.5ld/%s", topGroup.c_str(), sub_group, dsetName.c_str());
+        std::cout << "ana_reader_master: " << dset_path << std::endl;
         m_topGroups[topGroup][sub_group][dsetName] = Dset::open(m_master_fid, dset_path);
       }
     }
@@ -227,7 +228,6 @@ void AnaReaderMaster::close_dsets() {
 
 
 long AnaReaderMaster::calc_event_checksum(long event_number) {
-
   uint8_t * next_event_data = &m_event_data.at(0);
 
   typedef enum {unknown, check_event_number, copy_cspad, copy_vlen_blob, copy_long} Action;

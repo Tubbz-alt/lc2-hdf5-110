@@ -25,7 +25,7 @@ class Dset {
   std::vector<hsize_t> m_dims;
 
 protected:
-  void check_append(hid_t type, hsize_t count, size_t data_len);
+  void check_append(hid_t type, hsize_t start, hsize_t count, size_t data_len);
   void check_read(hid_t type, hsize_t start, hsize_t count);
   void file_space_select(hid_t file_space, hsize_t start, hsize_t count);
   void generic_append(hsize_t count, const void *data);
@@ -44,8 +44,8 @@ public:
   // close/cleanup
   void close();
 
-  void append(hsize_t count, const std::vector<int64_t> &data);
-  void append(hsize_t count, const std::vector<int16_t> &data);
+  void append(hsize_t start, hsize_t count, const std::vector<int64_t> &data);
+  void append(hsize_t start, hsize_t count, const std::vector<int16_t> &data);
 
 	void read(hsize_t start, hsize_t count, std::vector<int64_t> &data);
 	void read(hsize_t start, hsize_t count, std::vector<int16_t> &data);
@@ -54,6 +54,10 @@ public:
 
   static Dset create(hid_t parent, const char *name, hid_t h5type, const std::vector<hsize_t> &chunk);
   static Dset open(hid_t parent, const char *name);
+  static std::vector<hsize_t> get_chunk(const std::string & fname, const std::string &dset);
+  static std::vector<hsize_t> get_chunk(hid_t parent, const std::string &dset);
+  static std::vector<hsize_t> get_chunk(hid_t parent, hid_t dset);
+ 
 };
 
 #endif

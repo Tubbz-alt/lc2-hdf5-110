@@ -25,7 +25,7 @@ daq_writer:
     round_robin:
       cspad:
         source:
-          filename: /reg/d/ana01/temp/davidsch/lc2/xpptut15-r0321.h5
+          filename: /reg/d/ana01/temp/davidsch/lc2/xpptut15-r0321-reformat.h5
           dataset: /Configure:0000/Run:0000/CalibCycle:0000/CsPad::ElementV2/XppGon.0:Cspad.0/data
           length: 10
 

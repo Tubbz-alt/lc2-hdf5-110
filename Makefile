@@ -73,14 +73,14 @@ include/check_macros.h:
 bin/daq_writer: build/daq_writer.o lib/liblc2daq.so
 	$(CC) $(LDFLAGS) -llc2daq $< -o $@
 
-build/daq_writer.o: src/daq_writer.cpp 
+build/daq_writer.o: app/daq_writer.cpp 
 	$(CC) $(CFLAGS) $< -o $@
 
 #### DAQ MASTER
 bin/daq_master: build/daq_master.o lib/liblc2daq.so
 	$(CC) $(LDFLAGS) -llc2daq  -lyaml-cpp $< -o $@
 
-build/daq_master.o: src/daq_master.cpp
+build/daq_master.o: app/daq_master.cpp
 	$(CC) $(CFLAGS)  $< -o $@
 
 #### ANA READ MASTER
@@ -94,7 +94,7 @@ build/ana_reader_master.o: app/ana_reader_master.cpp
 bin/ana_reader_stream: build/ana_reader_stream.o lib/liblc2daq.so
 	$(CC) $(LDFLAGS) -llc2daq  -lyaml-cpp $< -o $@
 
-build/ana_reader_stream.o: src/ana_reader_stream.cpp
+build/ana_reader_stream.o: app/ana_reader_stream.cpp
 	$(CC) $(CFLAGS) $< -o $@
 
 #### EVENT BASED INSTEAD OF ARRAY BASED
@@ -114,8 +114,8 @@ build/test_Dset.o: test/test_Dset.cpp
 bin/test_vds_round_robin: build/test_vds_round_robin.o lib/liblc2daq.so
 	$(CC) $(LDFLAGS) -llc2daq -lyaml-cpp $< -o $@
 
-bin/test_Dset: build/test_Dset.o build/Dset.o
-	$(CC) $(LDFLAGS) build/test_Dset.o build/Dset.o -o $@
+bin/test_Dset: build/test_Dset.o build/Dset.o build/DsetPropAccess.o
+	$(CC) $(LDFLAGS) build/test_Dset.o build/Dset.o build/DsetPropAccess.o -o $@
 
 # TODO: add back test_vds_round_robin
 test: bin/test_Dset 

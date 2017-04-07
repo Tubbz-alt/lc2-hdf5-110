@@ -129,10 +129,14 @@ void DaqBase::load_cspad(const std::string &h5_filename,
                          std::vector<short> &cspad_buffer) {
   size_t total = size_t(CSPadNumElem) * size_t(length);
   cspad_buffer.resize(total);
-  for (size_t jj = 0; jj < size_t(length); ++jj) {
-    short val = short(jj / CSPadNumElem);
-    cspad_buffer.at(jj) = val;
-  }
+  std::cout << " len=" << length << " tot=" << total << " sz=" << cspad_buffer.size() << std::endl;
+  hid_t fid = POS( H5Fopen(h5_filename.data(), H5F_ACC_RDONLY , H5P_DEFAULT) );
+  Dset dset = Dset::open(fid, dataset.data());
+  dset.read(0, length, cspad_buffer);
+  std::cout << " len=" << length << " tot=" << total << " sz=" << cspad_buffer.size() << std::endl;
+  dset.close();
+  printf("loaded\n");
+  NONNEG( H5Fclose( fid ) );                         
 }
 
 DaqBase::~DaqBase() {

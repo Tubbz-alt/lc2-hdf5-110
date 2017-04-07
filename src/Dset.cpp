@@ -9,25 +9,25 @@
 #include "check_macros.h"
 
 
-void print_h5space(std::ostream &ostr, const char *header, hid_t space) {
-  htri_t is_simple = H5Sis_simple(space);
-  ostr << header << ": is_simple=" << is_simple;
-
-  if (is_simple < 1) return;
+void print_h5_hyperslab(std::ostream &ostr, const char *header, hid_t space) {
   int ndims = H5Sget_simple_extent_ndims(space);
 
-  htri_t is_reg_hyper = H5Sis_regular_hyperslab(space);
-  ostr << " is_reg_hyper=" << is_reg_hyper;
+  ostr << header << ": ";
 
-  if (is_reg_hyper >= 1) {
-    std::vector<hsize_t> start(ndims), count(ndims), stride(ndims), block(ndims);
-    H5Sget_regular_hyperslab(space, &start.at(0), &stride.at(0), &count.at(0), &block.at(0));
-    ostr << " start=" << start << " count=" << count << " stride=" << stride << " block=" << block;
-  } else {
-    std::vector<hsize_t> dims(ndims);
-    H5Sget_simple_extent_dims(space, &dims.at(0), NULL );
-    ostr << " dims=" << dims;
-  }
+  std::vector<hsize_t> start(ndims), count(ndims), stride(ndims), block(ndims);
+  H5Sget_regular_hyperslab(space, &start.at(0), &stride.at(0), &count.at(0), &block.at(0));
+  ostr << " start=" << start << " count=" << count << " stride=" << stride << " block=" << block;
+  ostr << std::endl;
+  ostr.flush();
+}
+
+void print_h5_simple(std::ostream &ostr, const char *header, hid_t space) {
+  ostr << header << ": ";
+  int ndims = H5Sget_simple_extent_ndims(space);
+
+  std::vector<hsize_t> dims(ndims);
+  H5Sget_simple_extent_dims(space, &dims.at(0), NULL );
+  ostr << " dims=" << dims;
   ostr << std::endl;
   ostr.flush();
 }
@@ -53,9 +53,73 @@ Dset Dset::create(hid_t parent, const char *name, hid_t h5type, const std::vecto
 }
 
 
+std::vector<hsize_t> Dset::get_chunk(const std::string & fname, const std::string &dset) {
+  hid_t parent = POS( H5Fopen(fname.c_str(), H5F_ACC_RDONLY | H5F_ACC_SWMR_READ, H5P_DEFAULT) );
+  std::vector<hsize_t> chunk = get_chunk(parent, dset);
+  NONNEG( H5Fclose( parent ) );
+  return chunk;
+}
+
+std::vector<hsize_t> Dset::get_chunk(hid_t parent, const std::string &dset) {
+  hid_t dset_id = NONNEG(H5Dopen2(parent, dset.c_str(), H5P_DEFAULT));
+  std::vector<hsize_t> chunk = get_chunk(parent, dset_id);
+  NONNEG( H5Dclose( dset_id ) );
+  return chunk;
+}
+
+std::vector<hsize_t> Dset::get_chunk(hid_t parent, hid_t dset) {
+  std::vector<hsize_t> chunk;
+  hid_t dspace_id = NONNEG(H5Dget_space(dset));
+  int rank = NONNEG(H5Sget_simple_extent_ndims(dspace_id));
+  chunk.resize(rank);
+
+  hid_t proplist = NONNEG(H5Dget_create_plist(dset));
+  H5D_layout_t layout = NONNEG( H5Pget_layout( proplist ) );
+
+  if (layout == H5D_CHUNKED) {
+    NONNEG(H5Pget_chunk(proplist, rank, &chunk.at(0)));
+  } else if (layout == H5D_VIRTUAL) {
+    size_t num_map;
+    NONNEG( H5Pget_virtual_count( proplist, &num_map) );
+
+    for (size_t ii = 0; ii < num_map; ++ii) {
+
+      ssize_t filename_len = NONNEG( H5Pget_virtual_filename( proplist, ii, NULL, 0) );
+      std::string filename; filename.resize(filename_len+1);
+      NONNEG( H5Pget_virtual_filename( proplist, ii, &filename.at(0), filename_len+1) );
+
+      ssize_t dset_len = NONNEG( H5Pget_virtual_dsetname( proplist, ii, NULL, 0) );
+      std::string dsetname; dsetname.resize(dset_len+1);
+      NONNEG( H5Pget_virtual_dsetname( proplist, ii, &dsetname.at(0), dset_len+1) );
+      
+      std::vector<hsize_t> chunk_ii = get_chunk(filename, dsetname);
+
+      if (ii == 0) {
+        chunk = chunk_ii;
+      } else {
+        if ( chunk != chunk_ii) {
+          throw std::runtime_error("chunks across mappings in VDS not equal");
+        }
+      }
+    }
+    chunk.at(0) *= num_map;
+  } else {
+    throw std::runtime_error("neither VDS or chunked dataset");
+  }
+
+  NONNEG(H5Pclose(proplist));
+  NONNEG(H5Sclose(dspace_id));
+
+  return chunk;
+}
+
 Dset Dset::open(hid_t parent, const char *name) {
   // open and close the dataset in order to read the
-  // dimensions, type and chunk size
+  // dimensions, type and chunk size. We want a per
+  // dataset cache of 3 types the chunk cache.
+  // If it is a virtual dataset, we want to do sum
+  // the chunk size among all the source files.
+
   std::vector<hsize_t> dims, chunk;
   hid_t h5type = -1;
   {
@@ -63,7 +127,6 @@ Dset Dset::open(hid_t parent, const char *name) {
     hid_t dspace_id = NONNEG(H5Dget_space(dset));
     int rank = NONNEG(H5Sget_simple_extent_ndims(dspace_id));
     dims.resize(rank);
-    chunk.resize(rank);
     NONNEG(H5Sget_simple_extent_dims(dspace_id, &dims.at(0), NULL));
 
     hid_t type = NONNEG(H5Dget_type(dset));
@@ -74,10 +137,9 @@ Dset Dset::open(hid_t parent, const char *name) {
     } else {
       throw std::runtime_error("this is not a int64 or int16 dataset");
     }
-    hid_t proplist = NONNEG(H5Dget_create_plist(dset));
-    NONNEG(H5Pget_chunk(proplist, rank, &chunk.at(0)));
 
-    NONNEG(H5Pclose(proplist));
+    chunk = get_chunk(parent, dset);
+
     NONNEG(H5Sclose(dspace_id));
     NONNEG(H5Dclose(dset));
     NONNEG(H5Tclose(type));
@@ -87,7 +149,7 @@ Dset Dset::open(hid_t parent, const char *name) {
   for (auto iter = chunk.begin(); iter != chunk.end(); ++iter) {
     chunk_cache_bytes *= *iter;
   }
-  chunk_cache_bytes *= 3;
+  chunk_cache_bytes *= 2;
 
   // now open with a access based on dimensions
   hid_t access_id = NONNEG(H5Pcreate(H5P_DATASET_ACCESS));
@@ -121,10 +183,15 @@ void Dset::check_read(hid_t type, hsize_t start, hsize_t count) {
   }
 }
 
-  void Dset::check_append(hid_t type, hsize_t count, size_t data_len) {
+void Dset::check_append(hid_t type, hsize_t start, hsize_t count, size_t data_len) {
   if ( H5Tequal(m_type, type) <= 0) {
     throw std::runtime_error("dset::append, type mismatch");
   }
+
+  if (size_t(start) + size_t(count) > data_len) {
+    throw std::runtime_error("start+count is > data_len - append");
+  }
+  data_len -= size_t(start);
 
   hsize_t min_elem_needed_in_data = count;
   if (m_dims.size() > 1) {
@@ -134,10 +201,10 @@ void Dset::check_read(hid_t type, hsize_t start, hsize_t count) {
       min_elem_needed_in_data *= *iter++;
     }
   }
-  if (min_elem_needed_in_data < data_len) {
+  
+  if (min_elem_needed_in_data > data_len) {
     throw std::runtime_error("Dset::append - data doesn't have enough elements");
   }
-
 }
 
 
@@ -147,7 +214,6 @@ void Dset::generic_append(hsize_t count, const void *data) {
   NONNEG( H5Dset_extent(m_id, &m_dims[0]));
 
   hid_t filespace = NONNEG( H5Dget_space(m_id) );
-  std::cout << "start=" << start << "end=" << count << std::endl;
   file_space_select(filespace, start, count);
 
   std::vector<hsize_t > mem_dims(m_dims);
@@ -155,9 +221,8 @@ void Dset::generic_append(hsize_t count, const void *data) {
 
   hid_t memspace = NONNEG( H5Screate_simple(int(mem_dims.size()), &mem_dims.at(0), &mem_dims.at(0)));
   NONNEG( H5Sselect_all(memspace));
- // print_h5space(std::cout, "filespace", filespace);
-//  print_h5space(std::cout, "memspace", memspace);
-
+  // print_h5_hyperslab(std::cout, "filespace", filespace);
+  // print_h5_simple(std::cout, "memspace", memspace);
   NONNEG( H5Dwrite(m_id, m_type, memspace, filespace, H5P_DEFAULT, data));
 
   NONNEG(H5Sclose(filespace));
@@ -165,14 +230,15 @@ void Dset::generic_append(hsize_t count, const void *data) {
 }
 
 
-void Dset::append(hsize_t count, const std::vector<int16_t> &data) {
-  check_append(H5T_NATIVE_INT16, count, data.size());
+void Dset::append(hsize_t start, hsize_t count, const std::vector<int16_t> &data) {
+  check_append(H5T_NATIVE_INT16, start, count, data.size());
+  generic_append(count, &data.at(start));
 }
 
 
-void Dset::append(hsize_t count, const std::vector<int64_t> &data) {
-  check_append(H5T_NATIVE_INT64, count, data.size());
-  generic_append(count, &data.at(0));
+void Dset::append(hsize_t start, hsize_t count, const std::vector<int64_t> &data) {
+  check_append(H5T_NATIVE_INT64, start, count, data.size());
+  generic_append(count, &data.at(start));
 }
 
 void Dset::generic_read(hsize_t start, hsize_t count, void *data) {
@@ -184,8 +250,9 @@ void Dset::generic_read(hsize_t start, hsize_t count, void *data) {
 
   hid_t memspace = NONNEG( H5Screate_simple(int(mem_dims.size()), &mem_dims.at(0), &mem_dims.at(0)));
   NONNEG( H5Sselect_all(memspace));
-  // print_h5space(std::cout, "filespace", filespace);
-  // print_h5space(std::cout, "memspace", memspace);
+
+  // print_h5_hyperslab(std::cout, "filespace", filespace);
+  // print_h5_simple(std::cout, "memspace", memspace);
 
   NONNEG( H5Dread(m_id, m_type, memspace, filespace, H5P_DEFAULT, data));
 
@@ -196,14 +263,18 @@ void Dset::generic_read(hsize_t start, hsize_t count, void *data) {
 
 void Dset::read(hsize_t start, hsize_t count, std::vector<int64_t> &data) {
   check_read(H5T_NATIVE_INT64, start, count);
-  data.resize(count);
+  size_t data_len = count;
+  for (int idx = 1; idx < m_dims.size(); ++idx)  data_len *= m_dims.at(idx);
+  data.resize(data_len);
   generic_read(start, count, &data.at(0));
 }
 
 
 void Dset::read(hsize_t start, hsize_t count, std::vector<int16_t> &data) {
   check_read(H5T_NATIVE_INT16, start, count);
-  data.resize(count);
+  size_t data_len = count;
+  for (int idx = 1; idx < m_dims.size(); ++idx)  data_len *= m_dims.at(idx);
+  data.resize(data_len);
   generic_read(start, count, &data.at(0));
 }
 
@@ -260,139 +331,3 @@ void Dset::close() {
     m_id = -1;
   }
 }
-
-/*
-void Dset::increase_extent(hsize_t extend) {
-  m_dims.at(0) += extend;
-  NONNEG( H5Dset_extent(m_id, &m_dims.at(0)) );
-
-}
-
-void Dset::file_space_select(hsize_t start, hsize_t count) {
-  NONNEG( H5Sset_extent_simple(m_file_space, m_dims.size(), ))
-}
-void Dset::mem_space_select(hsize_t count);
-
-void Dset::append(const std::vector<int64_t> & data) {
-  if (H5Tequal(m_type, H5T_NATIVE_INT64) <= 0) {
-    throw std::runtime_error("Dset::append<int64> but dataset is not int64");
-  }
-  hsize_t start = m_dims.at(0);
-  increase_extent(data.size());
-  file_space_select(start, data.size());
-  mem_space_select(data.size());
-
-
-
-
-  NONNEG( H5Sselect_hyperslab(m_file_select_count, H5S_SELECT_SET,
-                              &start, NULL, &count, NULL) );
-  hid_t memory_dspace_id = NONNEG( H5Screate_simple(1, &count, &count) );
-  NONNEG( H5Dwrite(dset_info.dset_id,
-                   H5T_NATIVE_LONG,
-                   memory_dspace_id,
-                   dspace_id,
-                   H5P_DEFAULT,
-                   data) );
-  NONNEG( H5Sclose(dspace_id) );
-  NONNEG( H5Sclose(memory_dspace_id) );
-
-}
-
- */
-
-
-/*
-// -------------------------------------------------------------------
-// DsetWriterInfo
-void DsetWriterInfo::close() {
-  Dset::close();
-  if (m_filespace > -1) {
-    NONNEG( H5Sclose( m_filespace ) );
-  }
-  if (m_mem_space > -1) {
-    NONNEG( H5Sclose( m_mem_space) );
-  }
-}
-
-DsetWriterInfo &DsetWriterInfo::operator=( DsetWriterInfo &o) {
-  Dset::operator=(o);
-  m_filespace = o.m_filespace;
-  m_mem_space = o.m_mem_space;
-  return *this;
-}
-
-DsetWriterInfo::DsetWriterInfo(hid_t _dset_i; std::vector<hsize_t> _dims) :
-  Dset(_dset_id, _dims)
-{
-  dims( _dims );
-}
-
-DsetWriterInfo::DsetWriterInfo(hid_t _dset_id, hsize_t _extent) :
-  Dset(_dset_id, _extent) {
-}
-
-// -------------------------------------------------------------------
-// DsetReaderInfo
-void DsetReaderInfo::close() {
-  if (m_mem_space_id > -1) {
-    NONNEG( H5Sclose( m_mem_space_id) );
-  }
-  if (file_space_id() > -1) {
-    NONNEG( H5Sclose( file_space_id() ) );
-  }
-  Dset::close();
-}
-
-DsetReaderInfo::DsetReaderInfo( const DsetReaderInfo &o) :
-  Dset(o),
-  m_mem_space_id(o.m_mem_space_id),
-  m_file_space_id(o.m_file_space_id),
-  m_file_select_start(o.m_file_select_start),
-  m_file_select_count(o.m_file_select_count),
-  m_file_select_stride(o.m_file_select_stride),
-  m_file_select_block(o.m_file_select_block)
-{
-}
-
-DsetReaderInfo &DsetReaderInfo::operator=( DsetReaderInfo &o) {
-  Dset::operator=(o);
-  m_mem_space_id = o.m_mem_space_id;
-  m_file_space_id = o.m_file_space_id;
-
-  m_file_select_start = o.m_file_select_start;
-  m_file_select_count = o.m_file_select_count;
-  m_file_select_stride = o.m_file_select_stride;
-  m_file_select_block = o.m_file_select_block;
-  
-  return *this;
-}
-
-void DsetReaderInfo::dims(const std::vector<hsize_t> &new_dims) {
-  if (file_space_id() < 0) {
-    file_space_id(  NONNEG( H5Screate( H5S_SIMPLE ) ) );
-  }
-
-  if (mem_space_id() < 0) {
-    mem_space_id(  NONNEG( H5Screate( H5S_SIMPLE ) ) );
-  }
-
-  Dset::dims(new_dims);
-
-  m_file_select_start = std::vector<hsize_t>(new_dims.size(), 0);
-
-  m_file_select_count = std::vector<hsize_t>(new_dims.size(), 1);
-  
-  m_file_select_stride = std::vector<hsize_t>(new_dims.size(), 1);
-
-  m_file_select_block = new_dims;
-  m_file_select_block.at(0)=1;
-  
-  NONNEG( H5Sset_extent_simple( file_space_id(), dims().size(), &dims().at(0), NULL) );
-
-  NONNEG( H5Sset_extent_simple( mem_space_id(), dims().size(), &m_file_select_block.at(0), NULL) );
-}
-
-}
-*/
-

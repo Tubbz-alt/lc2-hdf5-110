@@ -17,9 +17,9 @@ void write_file() {
   std::vector<hsize_t> chunk = {100};
   Dset dset = Dset::create(fid, "dsetA", H5T_NATIVE_INT64, chunk);
   std::vector<int64_t> data = {3,4,5};
-  dset.append(3, data);
-  dset.append(3, data);
-  dset.append(3, data);
+  dset.append(0, 3, data);
+  dset.append(0, 3, data);
+  dset.append(0, 3, data);
   dset.close();
   NONNEG(H5Fclose(fid));
 }

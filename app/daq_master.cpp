@@ -6,7 +6,7 @@
 #include <unistd.h>
 
 #include "lc2daq.h"
-#include "daq_base.h"
+#include "DaqBase.h"
 
 class DaqMaster : public DaqBase {
   int m_num_writers;
@@ -252,9 +252,11 @@ int main(int argc, char *argv[]) {
   try {
     DaqMaster daqMaster(argc, argv);
     daqMaster.run();
-  } catch (...) {
+  } catch (const std::exception &ex) {
+    std::cout << "Caught exception: " << ex.what() << std::endl;
+    std::cout << "trying to close library " << std::endl;
     H5close();
-    throw;
+    throw ex;
   }
   H5close();
   
