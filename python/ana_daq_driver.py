@@ -135,10 +135,13 @@ def run(argv):
 
     daq_writer_hosts = assign_hosts('daq_writer', config)
     daq_master_hosts = assign_hosts('daq_master', config)
+    ana_reader_hosts = assign_hosts('daq_master', config)
 
     jobs.launch('daq_writer', daq_writer_hosts)
+    time.sleep(2)
     jobs.launch('daq_master', daq_master_hosts)
-    time.sleep(1)
+    time.sleep(2)
+    jobs.launch('ana_reader_master', ana_reader_hosts)
     jobs.wait()
 
 if __name__ == '__main__':

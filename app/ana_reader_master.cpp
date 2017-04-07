@@ -25,6 +25,7 @@ class AnaReaderMaster : public DaqBase {
   int m_vlen_max_per_shot;
   int m_wait_for_dsets_microsecond_pause;
   int m_wait_for_dsets_timeout;
+  int m_wait_master_seconds_max;
   std::string m_master_fname, m_output_fname;
   hid_t m_master_fid;
   hid_t m_output_fid;
@@ -72,10 +73,11 @@ AnaReaderMaster::AnaReaderMaster(int argc, char *argv[])
     m_vlen_max_per_shot(m_config["daq_writer"]["datasets"]["single_source"]["vlen"]["max_per_shot"].as<int>()),
     m_wait_for_dsets_microsecond_pause(m_config["ana_reader_master"]["wait_for_dsets_microsecond_pause"].as<int>()),
     m_wait_for_dsets_timeout(m_config["ana_reader_master"]["wait_for_dsets_timeout"].as<int>()),
+    m_wait_master_seconds_max(m_config["ana_reader_master"]["wait_master_seconds_max"].as<int>()),
     m_master_fid(-1),
     m_output_fid(-1)
 {  
-  m_master_fname = DaqBase::form_fullpath("daq_master", m_id, HDF5);
+  m_master_fname = DaqBase::form_fullpath("daq_master", 0, HDF5);
   m_output_fname = DaqBase::form_fullpath("ana_reader_master", m_id, HDF5);
 
   m_top_group_2_num_subgroups[std::string("small")] = m_num_small_per_writer * m_num_writers;
@@ -117,8 +119,9 @@ void AnaReaderMaster::run() {
 
 
 void AnaReaderMaster::wait_for_SWMR_access_to_master() {
-  const int microseconds_to_wait = 100000;
-  while (true) {
+  const int microseconds_to_wait = 500000;
+  float seconds_waited = 0.0;
+  while (seconds_waited < m_wait_master_seconds_max) {
     FILE *fp = fopen(m_master_fname.c_str(), "r");
     if (NULL != fp) {
       if (m_config["verbose"].as<int>() > 0) fprintf(stdout, "ana_reader_master: found %s\n" , m_master_fname.c_str());
@@ -128,7 +131,12 @@ void AnaReaderMaster::wait_for_SWMR_access_to_master() {
     } else {
       if (m_config["verbose"].as<int>() > 0) fprintf(stdout, "ana_reader_master_%d: still waiting for %s\n" , m_id, m_master_fname.c_str());
       usleep(microseconds_to_wait);
+      seconds_waited += float(microseconds_to_wait)/1000000.0;
     }
+  }
+  if (seconds_waited >= m_wait_master_seconds_max) {
+    fprintf(stdout, "ana_reader_master_%d: timed out waiting for master", m_id);
+    throw std::runtime_error("timeout waiting for master from ana_reader_master");
   }
 }
 
@@ -239,15 +247,10 @@ long AnaReaderMaster::calc_event_checksum(long event_number) {
        topIter != m_top_group_2_num_subgroups.end(); ++topIter) {
 
     std::string topName = topIter->first;
-
     if (event_number % m_rates[topName] != 0) continue;
-
     hsize_t event_index = event_number/m_rates[topName];
-
     size_t numSub = topIter->second;
-
     auto dsetNameList = m_group2dsets[topName];
-
     auto num2dsetNameList = m_topGroups[topName];
 
     for (auto dsetNameIter = dsetNameList.begin(); 
@@ -295,7 +298,13 @@ long AnaReaderMaster::calc_event_checksum(long event_number) {
       }
     }
   }
-  return 0;
+
+  long checksum = 0;
+  for (long *p = reinterpret_cast<long *>(m_event_data.data()); p < reinterpret_cast<long *>(next_event_data); ++p) {
+    checksum += *p;
+  }
+
+  return checksum;
 }
 
 

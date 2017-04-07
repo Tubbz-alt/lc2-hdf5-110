@@ -3,7 +3,7 @@ force: False
 rootdir: /reg/d/ana01/temp/davidsch/lc2
 rundir: runA
 num_samples: 1000
-verbose: 2
+verbose: 1
 flush_interval: 100
 writers_hang: False
 masters_hang: False
@@ -57,12 +57,13 @@ daq_master:
   
 ana_reader_master:
   # num processes analyzing data through the master
-  num: 1
-  num_per_host: 1
+  num: 2
+  num_per_host: 2
   event_block_size: 100  
   wait_for_dsets_microsecond_pause: -1
   wait_for_dsets_timeout: -1  
   num_writer_chunks_per_dataset_chunk_cache: 2
+  wait_master_seconds_max: 5
   hosts:
     - local
   

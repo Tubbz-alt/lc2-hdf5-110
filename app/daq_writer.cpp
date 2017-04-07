@@ -366,9 +366,11 @@ void DaqWriter::write_vlen(int64_t fiducial) {
         Dset & blobstart_dset = m_vlen_id_to_blob_start_dset[vlen_id];
         Dset & blobcount_dset = m_vlen_id_to_blob_count_dset[vlen_id];
 
-        std::cout << "vlen " << vlen_id << " fiducial=" << fiducial
-                  << " next_vlen_count=" << m_next_vlen_count
-                  << std::endl;
+        if (m_config["verbose"].as<int>()>=2) {
+            std::cout << "vlen " << vlen_id << " fiducial=" << fiducial
+                      << " next_vlen_count=" << m_next_vlen_count
+                      << std::endl;
+        }
         fid_dset.append(start, count, fid_data);
         nano_dset.append(start, count, nano_data);
         blob_start_data[0] = blobdata_dset.dim().at(0);
@@ -417,7 +419,6 @@ void DaqWriter::write_cspad(int64_t fiducial) {
       const hsize_t start=0;
       fid_dset.append(start, count, fid_data);
       nano_dset.append(start, count, nano_data);
-      std::cout << m_cspad_source.size() << std::endl;
       data_dset.append(cspad_start, count, m_cspad_source);
   }  
 };

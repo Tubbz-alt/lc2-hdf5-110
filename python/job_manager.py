@@ -43,6 +43,9 @@ class Jobs(object):
         command = '%s bin/%s %s' % (get_paths(), group, config_file)
         for idx, host in enumerate(hosts):
             command += ' %d' % idx
+            logfile = os.path.join(self.config['rootdir'], self.config['rundir'], 'logs', group)
+            logfile += '_%d.log' % idx
+            command += ' >%s 2>&1' % logfile
             if host == 'local':
                 command = "%s&" % command
             else:
