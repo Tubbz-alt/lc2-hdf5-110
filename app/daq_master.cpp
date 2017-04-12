@@ -181,17 +181,17 @@ void DaqMaster::create_all_master_groups_datasets_and_attributes() {
 
   // round robin datasets
   for (int cur_cspad = 0; cur_cspad < m_cspad_num; ++cur_cspad) {
-    std::vector<std::string> src_data, src_fid, src_nano;
+    std::vector<std::string> src_data, src_fid, src_milli;
     for (size_t idx = 0; idx < m_writer_fnames_h5.size(); ++idx) {
       char cur_cspad_str[128];
       sprintf(cur_cspad_str, "%5.5d", cur_cspad);
       src_data.push_back(std::string("/cspad/") + cur_cspad_str + "/data");
       src_fid.push_back(std::string("/cspad/") + cur_cspad_str + "/fiducials");
-      src_nano.push_back(std::string("/cspad/") + cur_cspad_str + "/nano");
+      src_milli.push_back(std::string("/cspad/") + cur_cspad_str + "/milli");
     }
     VDSRoundRobin roundRobinData(m_cspad_id_to_number_group.at(cur_cspad), "data", m_writer_fnames_h5, src_data);
     VDSRoundRobin roundRobinFid(m_cspad_id_to_number_group.at(cur_cspad), "fiducials", m_writer_fnames_h5, src_fid);
-    VDSRoundRobin roundRobinNano(m_cspad_id_to_number_group.at(cur_cspad), "nano", m_writer_fnames_h5, src_nano);
+    VDSRoundRobin roundRobinmilli(m_cspad_id_to_number_group.at(cur_cspad), "milli", m_writer_fnames_h5, src_milli);
   }
 
   // single source datasets
@@ -206,29 +206,29 @@ void DaqMaster::create_all_master_groups_datasets_and_attributes() {
     int vlen_first = writer * vlen_num_per_writer;
     
     for (int small_dset = small_first; small_dset < small_first + small_num_per_writer; ++small_dset) {
-      char data_path[256], fid_path[256], nano_path[256];
+      char data_path[256], fid_path[256], milli_path[256];
       sprintf(data_path, "/small/%5.5d/data", small_dset);
       sprintf(fid_path, "/small/%5.5d/fiducials", small_dset);
-      sprintf(nano_path, "/small/%5.5d/nano", small_dset);
+      sprintf(milli_path, "/small/%5.5d/milli", small_dset);
 
       H5Lcreate_external(src_writer_fname, data_path, m_master_fid, data_path, H5P_DEFAULT, H5P_DEFAULT);
       H5Lcreate_external(src_writer_fname, fid_path, m_master_fid, fid_path, H5P_DEFAULT, H5P_DEFAULT);
-      H5Lcreate_external(src_writer_fname, nano_path, m_master_fid, nano_path, H5P_DEFAULT, H5P_DEFAULT);
+      H5Lcreate_external(src_writer_fname, milli_path, m_master_fid, milli_path, H5P_DEFAULT, H5P_DEFAULT);
     }
     
     for (int vlen_dset = vlen_first; vlen_dset < vlen_first + vlen_num_per_writer; ++vlen_dset) {
-      char blob_path[256], blobcount_path[256], blobstart_path[256], fid_path[256], nano_path[256];
+      char blob_path[256], blobcount_path[256], blobstart_path[256], fid_path[256], milli_path[256];
       sprintf(blob_path, "/vlen/%5.5d/blob", vlen_dset);
       sprintf(blobcount_path, "/vlen/%5.5d/blobcount", vlen_dset);
       sprintf(blobstart_path, "/vlen/%5.5d/blobstart", vlen_dset);
       sprintf(fid_path, "/vlen/%5.5d/fiducials", vlen_dset);
-      sprintf(nano_path, "/vlen/%5.5d/nano", vlen_dset);
+      sprintf(milli_path, "/vlen/%5.5d/milli", vlen_dset);
 
       NONNEG( H5Lcreate_external(src_writer_fname, blob_path, m_master_fid, blob_path, H5P_DEFAULT, H5P_DEFAULT) );
       NONNEG( H5Lcreate_external(src_writer_fname, blobcount_path, m_master_fid, blobcount_path, H5P_DEFAULT, H5P_DEFAULT) );
       NONNEG( H5Lcreate_external(src_writer_fname, blobstart_path, m_master_fid, blobstart_path, H5P_DEFAULT, H5P_DEFAULT) );
       NONNEG( H5Lcreate_external(src_writer_fname, fid_path, m_master_fid, fid_path, H5P_DEFAULT, H5P_DEFAULT) );
-      NONNEG( H5Lcreate_external(src_writer_fname, nano_path, m_master_fid, nano_path, H5P_DEFAULT, H5P_DEFAULT) );
+      NONNEG( H5Lcreate_external(src_writer_fname, milli_path, m_master_fid, milli_path, H5P_DEFAULT, H5P_DEFAULT) );
     }
   }
 }

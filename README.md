@@ -31,7 +31,7 @@ The schema will be
 ```
 /small/00000/data
 /small/00000/fiducials
-/small/00000/nano
+/small/00000/milli
 
 /small/00001/data
 ...
@@ -39,12 +39,12 @@ The schema will be
 /vlen/00000/blobstart
 /vlen/00000/blobcount
 /vlen/00000/fiducials
-/vlen/00000/nano
+/vlen/00000/milli
 ...
 /detector/00000/data
 ...
 ```
 We will write many small groups, and each will have three datases.
-fiducials will just be a counter, and nano will track nanoseconds since program start.
-nano is just for profiling, not merging, fiducials is for merging.  
+fiducials will just be a counter, and milli will track milliseconds since program start.
+milli is just for profiling, not merging, fiducials is for merging.  
 

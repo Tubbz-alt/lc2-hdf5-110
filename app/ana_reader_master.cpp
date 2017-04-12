@@ -180,8 +180,8 @@ void AnaReaderMaster::analysis_loop() {
       event_numbers.push_back(event);
       m_t1 = Clock::now();
       auto diff = m_t1 - m_t0;
-      auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(diff).count();
-      event_processed_times.push_back(nanoseconds);
+      auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(diff).count();
+      event_processed_times.push_back(milliseconds);
     }
   }
 
@@ -261,7 +261,7 @@ long AnaReaderMaster::calc_event_checksum(long event_number) {
       Action action = copy_long;
       if (dsetName == std::string("fiducials")) {
         action = check_event_number;
-      } else if (dsetName == std::string("nano")) {
+      } else if (dsetName == std::string("milli")) {
         continue;
       } else if ((topName == std::string("cspad")) and (dsetName == std::string("data"))) {
         action = copy_cspad;

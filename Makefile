@@ -31,14 +31,17 @@ bin/ana_daq_driver:
 	chmod a+x bin/ana_daq_driver
 
 #### LIBS
-LIB_OBJS=build/DaqBase.o  build/Dset.o  build/DsetPropAccess.o  build/H5OpenObjects.o  build/VDSRoundRobin.o
-LIB_USER_HEADERS=include/lc2daq.h
+LIB_OBJS=build/DaqBase.o  build/Dset.o  build/DsetPropAccess.o  build/H5OpenObjects.o  build/VDSRoundRobin.o 
+LIB_USER_HEADERS=include/lc2daq.h 
 
 lib/liblc2daq.so: $(LIB_OBJS) $(LIB_USER_HEADERS)
 	$(CC) $(SHARED) $(LDFLAGS) $(LIB_OBJS) -o $@
 
 build/DaqBase.o: src/DaqBase.cpp include/DaqBase.h include/check_macros.h
 	$(CC) $(CFLAGS) src/DaqBase.cpp -o build/DaqBase.o
+
+build/easylogging++.o: src/easylogging++.cc include/easylogging++.h
+	$(CC) $(CFLAGS) src/easylogging++.cc -o build/easylogging++.o
 
 build/Dset.o: src/Dset.cpp include/Dset.h include/check_macros.h include/DsetPropAccess.h
 	$(CC) $(CFLAGS) src/Dset.cpp -o build/Dset.o
@@ -68,9 +71,10 @@ include/VDSRoundRobin.h:
 
 include/check_macros.h:
 
+include/easyloging++.h:
 
 #### DAQ WRITER RAW/STREAM
-bin/daq_writer: build/daq_writer.o lib/liblc2daq.so
+bin/daq_writer: build/daq_writer.o lib/liblc2daq.so build/easylogging++.o
 	$(CC) $(LDFLAGS) -llc2daq $< -o $@
 
 build/daq_writer.o: app/daq_writer.cpp 
@@ -117,7 +121,6 @@ bin/test_vds_round_robin: build/test_vds_round_robin.o lib/liblc2daq.so
 bin/test_Dset: build/test_Dset.o build/Dset.o build/DsetPropAccess.o
 	$(CC) $(LDFLAGS) build/test_Dset.o build/Dset.o build/DsetPropAccess.o -o $@
 
-# TODO: add back test_vds_round_robin
 test: bin/test_Dset 
 	bin/test_Dset
 

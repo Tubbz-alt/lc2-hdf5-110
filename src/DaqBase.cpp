@@ -25,7 +25,7 @@ DaqBase::DaqBase(int argc, char *argv[], const char *process) : m_process(proces
   m_fname_pid = form_fullpath(m_process, m_id, PID);
   m_fname_finished = form_fullpath(m_process, m_id, FINISHED);
 
-  // will set to "small" -> ["fiducials", "nano", "data"] ...
+  // will set to "small" -> ["fiducials", "milli", "data"] ...
   m_group2dsets = get_top_group_to_final_dsets();
 
 }
@@ -37,6 +37,10 @@ std::string DaqBase::form_basename(std::string process, int idx) {
   return process + "-s" + idstr;
 }
 
+std::string DaqBase::logHdr() {
+  auto milli_since_epoch = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
+  return std::to_string(milli_since_epoch) + " " + m_basename + ": ";
+}
 
 std::string DaqBase::form_fullpath(std::string process, int idx, enum Location location) {
   std::string basename = form_basename(process, idx);
@@ -67,7 +71,7 @@ void DaqBase::run_setup() {
   std::time_t start_run_time = std::chrono::system_clock::to_time_t(start_run);
   m_t0 = Clock::now();
     
-  std::cout << m_basename << ": start_time: " << std::ctime(&start_run_time) << std::endl;
+  std::cout << logHdr() << "start_time: " << std::ctime(&start_run_time) << std::endl;
 }
 
 
@@ -76,12 +80,12 @@ void DaqBase::write_pid_file() {
   char hostname[256];
   if (0 != gethostname(hostname, 256)) {
     sprintf(hostname, "--unknown--");
-    std::cerr << "DaqWriter: gethostname failed in write_pid_file" << std::endl;
+    std::cerr << logHdr() << "gethostname failed in write_pid_file" << std::endl;
   }
 
   FILE *pid_f = ::fopen(m_fname_pid.c_str(), "w");
   if (NULL == pid_f) {
-    std::cerr << "Could not create file: " << m_fname_pid << std::endl;
+    std::cerr << logHdr() << "Could not create file: " << m_fname_pid << std::endl;
     throw std::runtime_error("FATAL - write_pid_file");
   }
   fprintf(pid_f, "process=%s idx=%d hostname=%s pid=%d\n", 
@@ -129,20 +133,18 @@ void DaqBase::load_cspad(const std::string &h5_filename,
                          std::vector<short> &cspad_buffer) {
   size_t total = size_t(CSPadNumElem) * size_t(length);
   cspad_buffer.resize(total);
-  std::cout << " len=" << length << " tot=" << total << " sz=" << cspad_buffer.size() << std::endl;
   hid_t fid = POS( H5Fopen(h5_filename.data(), H5F_ACC_RDONLY , H5P_DEFAULT) );
   Dset dset = Dset::open(fid, dataset.data());
   dset.read(0, length, cspad_buffer);
-  std::cout << " len=" << length << " tot=" << total << " sz=" << cspad_buffer.size() << std::endl;
   dset.close();
-  printf("loaded\n");
+  std::cout << logHdr() << "loaded cspad" << std::endl;
   NONNEG( H5Fclose( fid ) );                         
 }
 
 DaqBase::~DaqBase() {
   FILE *finished_f = fopen(m_fname_finished.c_str(), "w");
   if (NULL==finished_f) {
-    std::cerr << "could not create finished file\n" << std::endl;
+    std::cerr << logHdr() << "could not create finished file\n" << std::endl;
     return;
   }
   fprintf(finished_f,"done.\n");

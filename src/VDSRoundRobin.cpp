@@ -238,8 +238,8 @@ hid_t VDSRoundRobin::create_vds_space()
   
   current_dims.at(0) = 0;
   max_dims.at(0) = H5S_UNLIMITED;
-  std::cout << "DBG: create_vds_space: rank=" << m_rank << " " << "current_dims" << current_dims << std::endl;
-  std::cout << "DBG: create_vds_space: rank=" << m_rank << " " << "max_dims" << max_dims << std::endl;
+//  std::cout << "DBG: create_vds_space: rank=" << m_rank << " " << "current_dims" << current_dims << std::endl;
+//  std::cout << "DBG: create_vds_space: rank=" << m_rank << " " << "max_dims" << max_dims << std::endl;
   
   return NONNEG( H5Screate_simple( m_rank, &current_dims.at(0), &max_dims.at(0) ) );
 }
@@ -259,10 +259,10 @@ hid_t VDSRoundRobin::select_all_of_any_src_countOne_blockUnlimited() {
   std::vector<hsize_t> blockUnlimited(m_one_block);
   blockUnlimited.at(0) = H5S_UNLIMITED;
 
-  std::cout << "DBG: select src=" << "start0" << start0 << std::endl;
-  std::cout << "DBG: select src=" << "stride1" << stride1 << std::endl;
-  std::cout << "DBG: select src=" << "count1" << count1 << std::endl;
-  std::cout << "DBG: select src=" << "blockUnlim" << blockUnlimited << std::endl;
+//  std::cout << "DBG: select src=" << "start0" << start0 << std::endl;
+//  std::cout << "DBG: select src=" << "stride1" << stride1 << std::endl;
+//  std::cout << "DBG: select src=" << "count1" << count1 << std::endl;
+//  std::cout << "DBG: select src=" << "blockUnlim" << blockUnlimited << std::endl;
 
   NONNEG( H5Sselect_hyperslab(src_space, H5S_SELECT_SET, 
                               &start0.at(0), &stride1.at(0), &count1.at(0), 
@@ -286,10 +286,10 @@ void VDSRoundRobin::select_unlimited_count_of_vds(hid_t space, hsize_t start, hs
 
   std::vector<hsize_t> block_one(m_one_block);
 
-  std::cout << "DBG: select vds=" << "start" << start_all_dims << std::endl;
-  std::cout << "DBG: select vds=" << "stride" << stride_all_dims << std::endl;
-  std::cout << "DBG: select vds=" << "count" << count_unlimited << std::endl;
-  std::cout << "DBG: select vds=" << "block" << block_one << std::endl;
+//  std::cout << "DBG: select vds=" << "start" << start_all_dims << std::endl;
+//  std::cout << "DBG: select vds=" << "stride" << stride_all_dims << std::endl;
+//  std::cout << "DBG: select vds=" << "count" << count_unlimited << std::endl;
+//  std::cout << "DBG: select vds=" << "block" << block_one << std::endl;
 
   NONNEG( H5Sselect_hyperslab(space, H5S_SELECT_SET, 
                               &start_all_dims.at(0),

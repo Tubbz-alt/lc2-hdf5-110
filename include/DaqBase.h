@@ -11,7 +11,7 @@
 
 typedef std::chrono::high_resolution_clock Clock;
 
-// map "fiducials" or "nano" to a Dset
+// map "fiducials" or "milli" to a Dset
 typedef std::map<std::string, Dset> Name2Dset;
 
 // map group numbers, i.e, 00000, to above
@@ -32,13 +32,13 @@ std::map<std::string, std::vector<std::string> > get_top_group_to_final_dsets() 
   std::vector<std::string> not_vlen, vlen;
   not_vlen.push_back(std::string("fiducials"));
   not_vlen.push_back(std::string("data"));
-  not_vlen.push_back(std::string("nano"));
+  not_vlen.push_back(std::string("milli"));
   
   vlen.push_back(std::string("fiducials"));
   vlen.push_back(std::string("blob"));
   vlen.push_back(std::string("blobcount"));
   vlen.push_back(std::string("blobstart"));
-  vlen.push_back(std::string("nano"));
+  vlen.push_back(std::string("milli"));
   
   group2dsets[std::string("small")] = not_vlen;
   group2dsets[std::string("cspad")] = not_vlen;
@@ -111,7 +111,6 @@ class DaqBase {
   TSubMap m_cspad_map;
   
   std::chrono::time_point<Clock> m_t0, m_t1;
-
   void run_setup();
   void write_pid_file();
 
@@ -119,16 +118,17 @@ class DaqBase {
   void create_number_groups(hid_t parent, TSubMap &sub_map, int first, int count);
   void close_number_groups(TSubMap &sub_map);
   void close_standard_groups();
-  
+  std::string logHdr();
+
   std::string form_fullpath(std::string process, int idx, enum Location location);
 
   
   static std::string form_basename(std::string process, int idx);
 
-  static void load_cspad(const std::string &h5_filename,
-                         const std::string &dataset,
-                         int length,
-                         std::vector<int16_t> &cspad_buffer);
+  void load_cspad(const std::string &h5_filename,
+                  const std::string &dataset,
+                  int length,
+                  std::vector<int16_t> &cspad_buffer);
   
  public:
 

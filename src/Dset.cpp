@@ -264,7 +264,7 @@ void Dset::generic_read(hsize_t start, hsize_t count, void *data) {
 void Dset::read(hsize_t start, hsize_t count, std::vector<int64_t> &data) {
   check_read(H5T_NATIVE_INT64, start, count);
   size_t data_len = count;
-  for (int idx = 1; idx < m_dims.size(); ++idx)  data_len *= m_dims.at(idx);
+  for (unsigned idx = 1; idx < m_dims.size(); ++idx)  data_len *= m_dims.at(idx);
   data.resize(data_len);
   generic_read(start, count, &data.at(0));
 }
@@ -273,7 +273,7 @@ void Dset::read(hsize_t start, hsize_t count, std::vector<int64_t> &data) {
 void Dset::read(hsize_t start, hsize_t count, std::vector<int16_t> &data) {
   check_read(H5T_NATIVE_INT16, start, count);
   size_t data_len = count;
-  for (int idx = 1; idx < m_dims.size(); ++idx)  data_len *= m_dims.at(idx);
+  for (unsigned idx = 1; idx < m_dims.size(); ++idx)  data_len *= m_dims.at(idx);
   data.resize(data_len);
   generic_read(start, count, &data.at(0));
 }

@@ -33,9 +33,9 @@ class DaqWriter : public DaqBase {
     m_vlen_id_to_fiducials_dset,
     m_cspad_id_to_fiducials_dset;
 
-  std::map<int, Dset> m_small_id_to_nano_dset,
-    m_vlen_id_to_nano_dset,
-    m_cspad_id_to_nano_dset;
+  std::map<int, Dset> m_small_id_to_milli_dset,
+    m_vlen_id_to_milli_dset,
+    m_cspad_id_to_milli_dset;
 
   std::map<int, Dset> m_small_id_to_data_dset,
     m_vlen_id_to_blob_dset,
@@ -62,7 +62,7 @@ public:
 protected:
   void create_fiducials_dsets(const std::map<int, hid_t> &id_to_number_group, 
                               std::map<int, Dset> &id_to_dset);
-  void create_nano_dsets(const std::map<int, hid_t> &, std::map<int, Dset> &);
+  void create_milli_dsets(const std::map<int, hid_t> &, std::map<int, Dset> &);
 
   void create_small_data_dsets();
   void create_cspad_data_dsets();
@@ -150,7 +150,7 @@ void DaqWriter::run() {
     }
   }
   if (m_config["writers_hang"].as<bool>()) {
-    printf("MSG: hanging\n");
+    std::cout << logHdr() << "MSG: hanging\n";
     fflush(::stdout);
     while (true) {}
   }
@@ -160,7 +160,7 @@ void DaqWriter::run() {
 
   auto total_diff = m_t1 - m_t0;
   auto seconds = std::chrono::duration_cast<std::chrono::seconds>(total_diff);
-  std::cout << "num seconds=" << seconds.count() << " num events=" << fiducial << std::endl;  
+  std::cout << logHdr() << "finished - num seconds=" << seconds.count() << " num events=" << fiducial << std::endl;
 }
 
 
@@ -169,7 +169,7 @@ void DaqWriter::create_file() {
   NONNEG( H5Pset_libver_bounds(fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST) );
   m_writer_fid = NONNEG( H5Fcreate(m_fname_h5.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, fapl) );
   if (m_config["verbose"].as<int>() > 0) {
-    printf("created file: %s\n", m_fname_h5.c_str());
+    std::cout << logHdr() << "created file: " << m_fname_h5 << std::endl;
     fflush(::stdout);
   }
   NONNEG( H5Pclose(fapl) );
@@ -177,7 +177,7 @@ void DaqWriter::create_file() {
 
 
 void DaqWriter::close_all_groups_datasets() {
-  printf("close all groups datasets\n");
+  std::cout << logHdr() << "close all groups datasets" << std::endl;
   fflush(::stdout);
   // need to implement? or is file close Ok?
 }
@@ -197,16 +197,16 @@ void DaqWriter::create_all_groups_datasets_and_attributes() {
   create_fiducials_dsets(m_vlen_id_to_number_group, m_vlen_id_to_fiducials_dset);
   create_fiducials_dsets(m_cspad_id_to_number_group, m_cspad_id_to_fiducials_dset);
 
-  create_nano_dsets(m_small_id_to_number_group, m_small_id_to_nano_dset);
-  create_nano_dsets(m_vlen_id_to_number_group, m_vlen_id_to_nano_dset);
-  create_nano_dsets(m_cspad_id_to_number_group, m_cspad_id_to_nano_dset);
+  create_milli_dsets(m_small_id_to_number_group, m_small_id_to_milli_dset);
+  create_milli_dsets(m_vlen_id_to_number_group, m_vlen_id_to_milli_dset);
+  create_milli_dsets(m_cspad_id_to_number_group, m_cspad_id_to_milli_dset);
 
   create_small_data_dsets();
   create_cspad_data_dsets();
   create_vlen_blob_and_index_dsets();
   
   if (m_config["verbose"].as<int>() > 0) {
-    printf("created all groups and datasets: %s\n", m_fname_h5.c_str());
+    std::cout << logHdr() << "created all groups and datasets: " << m_fname_h5 << std::endl;
     fflush(::stdout);
   }
 };
@@ -238,9 +238,9 @@ void DaqWriter::create_fiducials_dsets(const std::map<int, hid_t> &id_to_number_
 }
   
 
-void DaqWriter::create_nano_dsets(const std::map<int, hid_t> &id_to_number_group, std::map<int, Dset> &id_to_dset) {
+void DaqWriter::create_milli_dsets(const std::map<int, hid_t> &id_to_number_group, std::map<int, Dset> &id_to_dset) {
   create_small_dsets_helper(id_to_number_group, id_to_dset,
-                            "nano", m_small_chunksize);
+                            "milli", m_small_chunksize);
 }
   
 
@@ -303,29 +303,27 @@ void DaqWriter::write(int64_t fiducial) {
 void DaqWriter::write_small(int64_t fiducial) {
   const hsize_t start = 0;
   const hsize_t count = 1;
-  std::vector<int64_t> fid_data(count), nano_data(count);
+  std::vector<int64_t> fid_data(count), milli_data(count);
   fid_data.at(0)=fiducial;
 
   if (m_config["verbose"].as<int>()>= 2) {
-    printf("  smal(%ld)\n", fiducial);
+    std::cout << logHdr() << "  small " << fiducial << std::endl;
     fflush(::stdout);
   }
   if (fiducial == m_next_small) {
     m_next_small += std::max(1, m_small_shot_stride);
-    auto small_time = Clock::now();
-    auto diff = small_time - m_t0;
-    auto nano = std::chrono::duration_cast<std::chrono::nanoseconds>(diff);
-    nano_data[0]=nano.count();
+    auto milli = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
+    milli_data[0]=milli;
     for (int small_id = m_small_first;
          small_id < m_small_first + m_small_count;
          ++small_id)
       {
         Dset & fid_dset = m_small_id_to_fiducials_dset[small_id];
-        Dset & nano_dset = m_small_id_to_nano_dset[small_id];
+        Dset & milli_dset = m_small_id_to_milli_dset[small_id];
         Dset & data_dset = m_small_id_to_data_dset[small_id];
 
         fid_dset.append(start, count, fid_data);
-        nano_dset.append(start, count, nano_data);
+        milli_dset.append(start, count, milli_data);
         data_dset.append(start, count, fid_data);        
       }
   }
@@ -335,7 +333,7 @@ void DaqWriter::write_small(int64_t fiducial) {
 void DaqWriter::write_vlen(int64_t fiducial) {
   const hsize_t start = 0;
   const hsize_t count = 1;
-  std::vector<int64_t> fid_data(count), nano_data(count), blob_start_data(1), blob_count_data(1);
+  std::vector<int64_t> fid_data(count), milli_data(count), blob_start_data(1), blob_count_data(1);
   fid_data.at(0)=fiducial;
 
   if (m_config["verbose"].as<int>()>= 2) {
@@ -345,10 +343,8 @@ void DaqWriter::write_vlen(int64_t fiducial) {
 
   if (fiducial == m_next_vlen) {
     m_next_vlen += std::max(1, m_vlen_shot_stride);
-    auto vlen_time = Clock::now();
-    auto diff = vlen_time - m_t0;
-    auto nano = std::chrono::duration_cast<std::chrono::nanoseconds>(diff);
-    nano_data[0]=nano.count();
+    auto milli = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
+    milli_data[0]=milli;
 
     YAML::Node vlen = m_process_config["datasets"]["single_source"]["vlen"];
     m_next_vlen_count += 1;
@@ -361,7 +357,7 @@ void DaqWriter::write_vlen(int64_t fiducial) {
          ++vlen_id)
       {
         Dset & fid_dset = m_vlen_id_to_fiducials_dset[vlen_id];
-        Dset & nano_dset = m_vlen_id_to_nano_dset[vlen_id];
+        Dset & milli_dset = m_vlen_id_to_milli_dset[vlen_id];
         Dset & blobdata_dset = m_vlen_id_to_blob_dset[vlen_id];
         Dset & blobstart_dset = m_vlen_id_to_blob_start_dset[vlen_id];
         Dset & blobcount_dset = m_vlen_id_to_blob_count_dset[vlen_id];
@@ -372,7 +368,7 @@ void DaqWriter::write_vlen(int64_t fiducial) {
                       << std::endl;
         }
         fid_dset.append(start, count, fid_data);
-        nano_dset.append(start, count, nano_data);
+        milli_dset.append(start, count, milli_data);
         blob_start_data[0] = blobdata_dset.dim().at(0);
         blob_count_data[0] = m_next_vlen_count;
         blobstart_dset.append(start, count, blob_start_data);
@@ -398,27 +394,25 @@ void DaqWriter::write_cspad(int64_t fiducial) {
     m_next_cspad_in_source = 0;
   }
     
-  auto cspad_time = Clock::now();
-  auto diff = cspad_time - m_t0;
-  auto nano = std::chrono::duration_cast<std::chrono::nanoseconds>(diff);
-      
+  auto milli = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
+
   const hsize_t count = 1;
-  std::vector<int64_t> fid_data(count), nano_data(count);
+  std::vector<int64_t> fid_data(count), milli_data(count);
   fid_data.at(0)=fiducial;
-  nano_data[0]=nano.count();
+  milli_data[0]=milli;
 
   for (int cspad_id = m_cspad_first;
        cspad_id < m_cspad_first + m_cspad_count;
        ++cspad_id) {
 
       Dset & fid_dset = m_cspad_id_to_fiducials_dset[cspad_id];
-      Dset & nano_dset = m_cspad_id_to_nano_dset[cspad_id];
+      Dset & milli_dset = m_cspad_id_to_milli_dset[cspad_id];
       Dset & data_dset = m_cspad_id_to_data_dset[cspad_id];
       
       size_t cspad_start = size_t(CSPadNumElem) * size_t(m_next_cspad_in_source);
       const hsize_t start=0;
       fid_dset.append(start, count, fid_data);
-      nano_dset.append(start, count, nano_data);
+      milli_dset.append(start, count, milli_data);
       data_dset.append(cspad_start, count, m_cspad_source);
   }  
 };
@@ -439,17 +433,17 @@ void DaqWriter::flush_data(int64_t fiducial) {
     fflush(::stdout);
   }
   flush_helper(m_small_id_to_fiducials_dset);
-  flush_helper(m_small_id_to_nano_dset);
+  flush_helper(m_small_id_to_milli_dset);
   flush_helper(m_small_id_to_data_dset);
 
   flush_helper(m_vlen_id_to_fiducials_dset);
-  flush_helper(m_vlen_id_to_nano_dset);
+  flush_helper(m_vlen_id_to_milli_dset);
   flush_helper(m_vlen_id_to_blob_dset);
   flush_helper(m_vlen_id_to_blob_count_dset);
   flush_helper(m_vlen_id_to_blob_start_dset);
 
   flush_helper(m_cspad_id_to_fiducials_dset);
-  flush_helper(m_cspad_id_to_nano_dset);
+  flush_helper(m_cspad_id_to_milli_dset);
   flush_helper(m_cspad_id_to_data_dset);
 };
 
