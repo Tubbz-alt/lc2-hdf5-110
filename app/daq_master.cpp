@@ -117,8 +117,8 @@ void DaqMaster::close_files_and_objects() {
   for (int writer = 0; writer < m_num_writers; ++writer) {
     hid_t h5 = m_writer_h5.at(writer);
     if (m_config["verbose"].as<int>()>0) {
-      std::cout<< "H5OpenObjects report for writer " << writer << std::endl;
-      std::cout << H5OpenObjects(h5).dumpStr(true) << std::endl;
+      std::cout << logHdr() <<  "H5OpenObjects report for writer " << writer << std::endl;
+      std::cout << logHdr() <<  H5OpenObjects(h5).dumpStr(true) << std::endl;
     }
     NONNEG( H5Fclose( h5 ) );
   }
@@ -129,34 +129,22 @@ void DaqMaster::close_files_and_objects() {
   DaqBase::close_standard_groups();
   
   if (m_config["verbose"].as<int>()>0) {
-    std::cout<< "H5OpenObjects report for master" << std::endl;
-    std::cout << H5OpenObjects(m_master_fid).dumpStr(true) << std::endl;
+    std::cout<< logHdr() <<  "H5OpenObjects report for master" << std::endl;
+    std::cout << logHdr() <<  H5OpenObjects(m_master_fid).dumpStr(true) << std::endl;
   }
   NONNEG( H5Fclose(m_master_fid) );
 }
 
 
 void DaqMaster::wait_for_SWMR_access_to_all_writers() {
-  const int microseconds_to_wait = 100000;
   int writer_currently_waiting_for = 0;
+  bool verbose = m_config["verbose"].as<int>()>0;
   while (writer_currently_waiting_for < m_num_writers) {
-    auto fname = m_writer_fnames_h5.at(writer_currently_waiting_for).c_str();
-    FILE *fp = fopen(fname, "r");
-    if (NULL != fp) {
-      if (m_config["verbose"].as<int>()>0) fprintf(stdout, "daq_master: found %s\n" , fname);
-      fclose(fp);
-      hid_t h5 = NONNEG( H5Fopen(fname, H5F_ACC_RDONLY | H5F_ACC_SWMR_READ, H5P_DEFAULT) );
-      m_writer_h5.at(writer_currently_waiting_for) = h5;
-      ++writer_currently_waiting_for;
-    } else {
-      if (m_config["verbose"].as<int>()>0) {
-        fprintf(stdout, "daq_master_%d: still waiting for %s\n" , m_id, 
-                m_writer_fnames_h5.at(writer_currently_waiting_for).c_str());
-      }
-      usleep(microseconds_to_wait);
-    }
+    auto fname = m_writer_fnames_h5.at(writer_currently_waiting_for);
+    hid_t h5 = H5Fopen_with_polling(fname, H5F_ACC_RDONLY | H5F_ACC_SWMR_READ, H5P_DEFAULT, verbose);
+    m_writer_h5.at(writer_currently_waiting_for) = h5;
+    ++writer_currently_waiting_for;
   }
-  
 }
 
 
@@ -165,8 +153,7 @@ void DaqMaster::create_master_file() {
   NONNEG( H5Pset_libver_bounds(fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST) );
   m_master_fid = NONNEG( H5Fcreate(m_master_fname_h5.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, fapl) );
   if (m_config["verbose"].as<int>()>0) {
-    fprintf(stdout, "created file: %s\n", m_master_fname_h5.c_str());
-    fflush(::stdout);
+    std::cout << logHdr() << "created file: " << m_master_fname_h5 << std::endl;
   }
   NONNEG( H5Pclose(fapl) );
 }
@@ -237,8 +224,7 @@ void DaqMaster::create_all_master_groups_datasets_and_attributes() {
 void DaqMaster::start_SWMR_access_to_master_file() {
   NONNEG( H5Fstart_swmr_write(m_master_fid) );
   if (m_config["verbose"].as<int>()>0) {
-    printf("started SWMR access to master file\n");
-    fflush(::stdout);
+    std::cout << logHdr() << "started SWMR access to master file\n";
   }
 }
 
@@ -253,8 +239,8 @@ int main(int argc, char *argv[]) {
     DaqMaster daqMaster(argc, argv);
     daqMaster.run();
   } catch (const std::exception &ex) {
-    std::cout << "Caught exception: " << ex.what() << std::endl;
-    std::cout << "trying to close library " << std::endl;
+    std::cout <<  "daq_master: Caught exception: " << ex.what() << std::endl;
+    std::cout <<  "daq_master: trying to close library " << std::endl;
     H5close();
     throw ex;
   }

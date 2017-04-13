@@ -94,6 +94,46 @@ void DaqBase::write_pid_file() {
 }
 
 
+hid_t DaqBase::H5Fopen_with_polling(const std::string &fname, unsigned flags, hid_t fapl_id, bool verbose, int max_seconds) {
+  const int microseconds_to_wait = 100000;
+
+  int max_microseconds = max_seconds * 1000000;
+  int waited_so_far = 0;
+
+  /* Save old error handler */
+  H5E_auto2_t old_func;
+  void *old_client_data;
+  H5Eget_auto2(H5E_DEFAULT, &old_func, &old_client_data);
+  
+  /* Turn off error handling */
+  H5Eset_auto2(H5E_DEFAULT, NULL, NULL);
+
+  hid_t h5 = -1;
+  while (true) {
+    if (waited_so_far > max_microseconds) {
+      std::cout << logHdr() << "timeout waiting for " << fname << std::endl;
+      H5Eset_auto2(H5E_DEFAULT, old_func, old_client_data);
+      throw std::runtime_error("timeout");
+    }
+    h5 = H5Fopen(fname.c_str(), flags, fapl_id);
+    if (h5 >= 0) {
+      if (verbose) {
+        std::cout << logHdr() << "found " << fname << std::endl;
+      }
+      break;
+    }
+    std::cout << logHdr() << "still waiting for " << fname << std::endl;
+    usleep(microseconds_to_wait);
+    waited_so_far += microseconds_to_wait;
+  }
+
+  /* Restore previous error handler */
+  H5Eset_auto2(H5E_DEFAULT, old_func, old_client_data);
+	
+  return h5;
+}
+
+
 void DaqBase::create_standard_groups(hid_t parent) {
   m_small_group = NONNEG( H5Gcreate2(parent, "small", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT) );  
   m_vlen_group = NONNEG( H5Gcreate2(parent, "vlen", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT) );  

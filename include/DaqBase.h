@@ -121,9 +121,10 @@ class DaqBase {
   std::string logHdr();
 
   std::string form_fullpath(std::string process, int idx, enum Location location);
-
   
   static std::string form_basename(std::string process, int idx);
+
+  hid_t H5Fopen_with_polling(const std::string &fname, unsigned flags, hid_t fapl_id, bool verbose, int max_seconds=120);
 
   void load_cspad(const std::string &h5_filename,
                   const std::string &dataset,

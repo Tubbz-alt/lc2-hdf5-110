@@ -30,6 +30,7 @@ protected:
   void file_space_select(hid_t file_space, hsize_t start, hsize_t count);
   void generic_append(hsize_t count, const void *data);
   void generic_read(hsize_t start, hsize_t count, void *data);
+  std::ostream & dbgInfo(std::ostream &o);
 
 public:
   Dset() = default;
@@ -50,7 +51,7 @@ public:
 	void read(hsize_t start, hsize_t count, std::vector<int64_t> &data);
 	void read(hsize_t start, hsize_t count, std::vector<int16_t> &data);
 
-  bool wait(hsize_t len_to_grow_to, int microseconds_to_pause, int timeout_seconds);
+  bool wait(hsize_t len_to_grow_to, int microseconds_to_pause, int timeout_seconds, bool verbose);
 
   static Dset create(hid_t parent, const char *name, hid_t h5type, const std::vector<hsize_t> &chunk);
   static Dset open(hid_t parent, const char *name);

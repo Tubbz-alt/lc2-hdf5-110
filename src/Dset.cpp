@@ -170,25 +170,42 @@ Dset Dset::open(hid_t parent, const char *name) {
   return dset;
 }
 
+std::ostream & Dset::dbgInfo(std::ostream &o) {
+  char name[512];
+  NONNEG( H5Iget_name(id(), name, 512) );
+  hid_t space = NONNEG(H5Dget_space(id()));
+  int ndims = H5Sget_simple_extent_ndims(space);
+  std::vector<hsize_t> dims(ndims);
+  H5Sget_simple_extent_dims(space, &dims.at(0), NULL );
+  NONNEG(H5Sclose(space));
+  o << "dset=" << name << " &m_dims=" << &m_dims.at(0) << " m_dims=" << m_dims << " space_dims=" << dims;
+  return o;
+}
+
 
 void Dset::check_read(hid_t type, hsize_t start, hsize_t count) {
   if ( H5Tequal(m_type, type) <= 0) {
+    dbgInfo(std::cout) << "error: check_read, type=" << type << " start=" << start << " count=" << count << std::endl;
     throw std::runtime_error("dset::read, type mismatch");
   }
   if ((start < 0) or (count < 0)) {
+    dbgInfo(std::cout) << "error: check_read, type=" << type << " start=" << start << " count=" << count << std::endl;
     throw std::runtime_error("dset::read - start or count is negative");
   }
   if (start+count > m_dims.at(0)) {
+    dbgInfo(std::cout) << "error: check_read, type=" << type << " start=" << start << " count=" << count << std::endl;
     throw std::runtime_error("dset::read - start+count to big for dset");
   }
 }
 
 void Dset::check_append(hid_t type, hsize_t start, hsize_t count, size_t data_len) {
   if ( H5Tequal(m_type, type) <= 0) {
+    dbgInfo(std::cout) << "error: check_append, type=" << type << " start=" << start << " count=" << count << " data_len=" << data_len << std::endl;
     throw std::runtime_error("dset::append, type mismatch");
   }
 
   if (size_t(start) + size_t(count) > data_len) {
+    dbgInfo(std::cout) << "error: check_append, type=" << type << " start=" << start << " count=" << count << " data_len=" << data_len << std::endl;
     throw std::runtime_error("start+count is > data_len - append");
   }
   data_len -= size_t(start);
@@ -295,11 +312,14 @@ void Dset::file_space_select(hid_t file_space, hsize_t start, hsize_t count) {
 }
 
 
-bool Dset::wait(hsize_t len_to_grow_to, int microseconds_to_pause, int timeout_seconds) {
+bool Dset::wait(hsize_t len_to_grow_to, int microseconds_to_pause, int timeout_seconds, bool verbose) {
   auto t0 = std::chrono::system_clock::now();
   
   while (true) {
     if (m_dims[0] >= len_to_grow_to) {
+      if (verbose) {
+        dbgInfo(std::cout) << "wait returning true, len_to_grow_to=" << len_to_grow_to << std::endl;
+      }
       return true;
     }
 
@@ -317,7 +337,11 @@ bool Dset::wait(hsize_t len_to_grow_to, int microseconds_to_pause, int timeout_s
     }
 
     NONNEG( H5Drefresh(m_id) );
+    std::vector<hsize_t> old = m_dims;
     NONNEG( H5LDget_dset_dims(m_id, &m_dims.at(0)) );
+    if (verbose) {
+      dbgInfo(std::cout) << "called H5Drefresh/H5LDget_dset_dims - old=" << old << " new=" << m_dims << std::endl;
+    }
 
   }
 

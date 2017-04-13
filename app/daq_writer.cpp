@@ -142,7 +142,7 @@ void DaqWriter::run() {
   create_all_groups_datasets_and_attributes();
   start_SWMR_access_to_file();
   int64_t fiducial = -1;
-  fprintf(stdout, "daq_writer: about to loop through %ld fiducials\n", m_config["num_samples"].as<int64_t>());
+  std::cout << logHdr() << "about to loop through " << m_config["num_samples"].as<int64_t>() << " fiducials" << std::endl;
   for (fiducial = 0; fiducial < m_config["num_samples"].as<int64_t>(); ++fiducial) {
     write(fiducial);
     if ((fiducial > 0) and (0 == (fiducial % m_config["flush_interval"].as<int64_t>()))) {
@@ -283,7 +283,7 @@ void DaqWriter::create_vlen_blob_and_index_dsets() {
 void DaqWriter::start_SWMR_access_to_file() {
   NONNEG( H5Fstart_swmr_write(m_writer_fid) );
   if (m_config["verbose"].as<int>() > 0) {
-    printf("started SWMR access to writer file\n");
+    std::cout << logHdr() << "started SWMR access to writer file" << std::endl;
     fflush(::stdout);
   }
 };
@@ -291,7 +291,7 @@ void DaqWriter::start_SWMR_access_to_file() {
 
 void DaqWriter::write(int64_t fiducial) {
   if (m_config["verbose"].as<int>()>= 2) {
-    printf("daq_writer: entering write(%ld)\n", fiducial);
+    std::cout << logHdr() << "entering write" << fiducial << std::endl;
     fflush(::stdout);
   }
   write_small(fiducial);
@@ -337,7 +337,7 @@ void DaqWriter::write_vlen(int64_t fiducial) {
   fid_data.at(0)=fiducial;
 
   if (m_config["verbose"].as<int>()>= 2) {
-    printf("  vlen(%ld)\n", fiducial);
+    std::cout << logHdr() << "  vlen" << fiducial << std::endl;
     fflush(::stdout);
   }
 
@@ -363,9 +363,9 @@ void DaqWriter::write_vlen(int64_t fiducial) {
         Dset & blobcount_dset = m_vlen_id_to_blob_count_dset[vlen_id];
 
         if (m_config["verbose"].as<int>()>=2) {
-            std::cout << "vlen " << vlen_id << " fiducial=" << fiducial
-                      << " next_vlen_count=" << m_next_vlen_count
-                      << std::endl;
+          std::cout << logHdr() << "vlen " << vlen_id << " fiducial=" << fiducial
+                    << " next_vlen_count=" << m_next_vlen_count
+                    << std::endl;
         }
         fid_dset.append(start, count, fid_data);
         milli_dset.append(start, count, milli_data);
@@ -383,10 +383,10 @@ void DaqWriter::write_cspad(int64_t fiducial) {
   if (fiducial != m_next_cspad) return;
 
   if (m_config["verbose"].as<int>()>= 2) {
-    printf("  cspad(%ld)\n", fiducial);
+    std::cout << logHdr() << "cspad" << fiducial << std::endl;
     fflush(::stdout);
   }
-
+  
   m_next_cspad += std::max(1, m_cspad_shot_stride);
   m_next_cspad_in_source += 1;
   
@@ -429,19 +429,19 @@ void DaqWriter::flush_helper(const std::map<int, Dset> &id_to_dset) {
 
 void DaqWriter::flush_data(int64_t fiducial) {
   if (m_config["verbose"].as<int>() > 0 ) {
-    printf("flush_data: fiducial=%ld\n", fiducial);
+    std::cout << logHdr() << "flush_data: fiducial=" << fiducial << std::endl;
     fflush(::stdout);
   }
   flush_helper(m_small_id_to_fiducials_dset);
   flush_helper(m_small_id_to_milli_dset);
   flush_helper(m_small_id_to_data_dset);
-
+  
   flush_helper(m_vlen_id_to_fiducials_dset);
   flush_helper(m_vlen_id_to_milli_dset);
   flush_helper(m_vlen_id_to_blob_dset);
   flush_helper(m_vlen_id_to_blob_count_dset);
   flush_helper(m_vlen_id_to_blob_start_dset);
-
+  
   flush_helper(m_cspad_id_to_fiducials_dset);
   flush_helper(m_cspad_id_to_milli_dset);
   flush_helper(m_cspad_id_to_data_dset);
