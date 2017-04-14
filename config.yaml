@@ -52,6 +52,9 @@ daq_writer:
 daq_master:
   num: 1
   num_per_host: 1
+  all_dsets_up_to_this_fiducial:
+    chunksize: 10
+    wait_for_dsets_microsecond_pause: -1
   hosts: 
     - local
   

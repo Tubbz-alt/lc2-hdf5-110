@@ -18,9 +18,6 @@ class DaqMaster : public DaqBase {
   int m_cspad_stride_all;
   hid_t m_master_fid;
   
-  std::vector<int> m_small_name_first, m_vlen_name_first;
-  std::vector<int> m_small_count, m_vlen_count;
-
   std::vector<std::string> m_writer_basenames, m_writer_fnames_h5;
   std::vector<hid_t> m_writer_h5;
   
@@ -29,6 +26,8 @@ class DaqMaster : public DaqBase {
   std::map<int, hid_t> m_small_id_to_number_group;
   std::map<int, hid_t> m_vlen_id_to_number_group;
   std::map<int, hid_t> m_cspad_id_to_number_group;
+
+  Dset m_all_dsets_up_to_this_fiducial;
 
 public:
   DaqMaster(int argc, char *argv[]);
@@ -71,15 +70,6 @@ DaqMaster::DaqMaster(int argc, char *argv[])
     throw std::runtime_error("only 1 cspad is supported");
   }
 
-  for (int writer = 0; writer < m_num_writers; ++writer) {
-    int small_first = writer * m_small_num_per_writer; 
-    int vlen_first = writer * m_vlen_num_per_writer; 
-    m_small_name_first.push_back(small_first);
-    m_vlen_name_first.push_back(vlen_first);
-    m_small_count.push_back(m_small_num_per_writer);
-    m_vlen_count.push_back(m_vlen_num_per_writer);
-  }
-
   m_small_count_all = m_num_writers * m_small_num_per_writer;
   m_vlen_count_all = m_num_writers * m_vlen_num_per_writer;
 
@@ -107,12 +97,38 @@ void DaqMaster::run() {
 
 
 void DaqMaster::translation_loop() {
-  // if there are any datasets that have to be updated in the master,
-  // we put them here, for instance the fast/slow tables
+  int64_t num_samples = m_config["num_samples"].as<int64_t>();
+  std::vector<int64_t> data;
+  hsize_t count=1;
+  int writer=-1;
+
+  int64_t small_vlen_cspad_lens[3] = {-1,-1,-1};
+  const int smallIdx=0;
+  const int vlenIdx=1;
+  const int cspadIdx=2;
+  
+  int64_t lens_all = -1;
+
+  for (int64_t len = 1; len <= num_samples; ++len) {
+    int64_t fiducial = len-1;
+    if (smalls_write(fiducial)) {
+      //      small_vlen_cspad_lens[smallIdx] = wait_for_smalls(len, small_vlen_cspad_lens[smallIdx]);
+    }
+    if (vlens_write(fiducial)) {
+      //      small_vlen_cspad_lens[vlenIdx] = wait_for_vlens(len, small_vlen_cspad_lens[vlenIdx]);
+    }
+    if (cspads_write(fiducial, writer)) {
+      //      small_vlen_cspad_lens[cspadIdx] = wait_for_cspads(len, writer, small_vlen_cspad_lens[cspadIdx]);
+    }
+    hsize_t start=fiducial;
+    data[0]=fiducial;
+    m_all_dsets_up_to_this_fiducial.append(start, count, data);
+  }
 }
 
 
 void DaqMaster::close_files_and_objects() {
+  m_all_dsets_up_to_this_fiducial.close();
   
   for (int writer = 0; writer < m_num_writers; ++writer) {
     hid_t h5 = m_writer_h5.at(writer);
@@ -165,6 +181,11 @@ void DaqMaster::create_all_master_groups_datasets_and_attributes() {
   DaqBase::create_number_groups(m_small_group, m_small_id_to_number_group, 0, m_small_count_all);
   DaqBase::create_number_groups(m_vlen_group, m_vlen_id_to_number_group, 0, m_vlen_count_all);
   DaqBase::create_number_groups(m_cspad_group, m_cspad_id_to_number_group, 0, m_cspad_num);
+
+  std::vector<hsize_t> avail_chunk(1);
+  avail_chunk.at(0) = m_config["daq_master"]["all_dsets_up_to_this_fiducial"]["chunksize"].as<int>();
+
+  m_all_dsets_up_to_this_fiducial = Dset::create(m_master_fid, "all_dsets_up_to_this_fiducial", H5T_NATIVE_INT64, avail_chunk);
 
   // round robin datasets
   for (int cur_cspad = 0; cur_cspad < m_cspad_num; ++cur_cspad) {
