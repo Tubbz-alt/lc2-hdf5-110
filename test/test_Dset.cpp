@@ -27,7 +27,7 @@ void write_file() {
 
 void read_file() {
   hid_t fid = H5Fopen("test_Dset.h5",H5P_DEFAULT, H5P_DEFAULT);
-  Dset dset = Dset::open(fid, "dsetA");
+  Dset dset = Dset::open(fid, "dsetA", Dset::if_vds_first_missing);
   std::vector<int64_t> buf;
   dset.read(0,9,buf);
   std::cout << "read  back: "  << buf << std::endl;

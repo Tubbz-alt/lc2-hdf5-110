@@ -39,7 +39,7 @@ class AnaReaderMaster : public DaqBase {
   // map "small" -> N where N will be in terms of number of events
   std::map<std::string, int> m_events_per_dataset_chunkcache;
 
-  std::vector<uint8_t> m_event_data;
+  std::vector<int64_t> m_event_data;
 
 
 protected:
@@ -130,26 +130,32 @@ void AnaReaderMaster::analysis_loop() {
   std::vector<int64_t> event_numbers;
   std::vector<int64_t> event_processed_times;
 
-  size_t max_event_data_size = 0;
-  max_event_data_size += sizeof(int64_t) * 
+  size_t max_event_data_bytes = 0;
+  max_event_data_bytes += sizeof(int64_t) * 
     m_top_group_2_num_subgroups[std::string("small")] * 
     m_group2dsets[std::string("small")].size();
-  max_event_data_size += sizeof(int64_t) * 
+  max_event_data_bytes += sizeof(int64_t) * 
     m_top_group_2_num_subgroups[std::string("vlen")] * 
     m_group2dsets[std::string("vlen")].size();
-  max_event_data_size += sizeof(int64_t) * m_vlen_max_per_shot * 
+  max_event_data_bytes += sizeof(int64_t) * m_vlen_max_per_shot * 
     m_top_group_2_num_subgroups[std::string("vlen")]; // blobdata
-  max_event_data_size += m_num_cspad * sizeof(int64_t) * 
+  max_event_data_bytes += m_num_cspad * sizeof(int64_t) * 
     m_group2dsets[std::string("cspad")].size();
-  max_event_data_size += sizeof(short) * m_num_cspad * 32l * 185 * 388;
-
-  m_event_data.resize(max_event_data_size);
+  max_event_data_bytes += sizeof(short) * m_num_cspad * 32l * 185 * 388;
+  max_event_data_bytes *= 2; // just to be sure
+  size_t max_event_data_count = max_event_data_bytes / sizeof(int64_t);
+  m_event_data.resize(max_event_data_count);
   
   initialize_dsets();
 
   int64_t event_block_start = m_id * m_event_block_size;
   int64_t min_len_for_all = 0;
 
+  bool verbose2 = m_config["verbose"].as<int>()>=2;
+  int64_t report_interval = 50;
+  if (verbose2) report_interval = 1;
+
+    
   std::cout << logHdr() << " starting loop" << std::endl;
   while (event_block_start < m_num_samples) {
     int64_t first = event_block_start;
@@ -166,9 +172,11 @@ void AnaReaderMaster::analysis_loop() {
                   << " and event+1=" << event+1 << std::endl;
         throw std::runtime_error("problem");
       }
-      if (event % 50 == 0) {
+
+      if (event % report_interval == 0) {
         std::cout << logHdr() << " starting to process " << event << std::endl;
       }
+
       event_checksums.push_back(calc_event_checksum(event));
       event_numbers.push_back(event);
       auto milli = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
@@ -189,12 +197,12 @@ void AnaReaderMaster::analysis_loop() {
 
 void AnaReaderMaster::initialize_dsets() {
   char dset_path[512];
-  
+  bool verbose1 = m_config["verbose"].as<int>()>=1;
+  bool verbose2 = m_config["verbose"].as<int>()>=2;
+
   for (auto iter = m_group2dsets.begin(); iter != m_group2dsets.end(); ++iter) {
     auto &topGroup = iter->first;   // 'small'
     auto &dsetNames = iter->second;
-    //    int num_events_in_dataset_chunk_cache = m_events_per_dataset_chunkcache[topGroup];
-
     m_topGroups[topGroup] = Number2Dsets();
     size_t num_sub_groups = m_top_group_2_num_subgroups[topGroup];
 
@@ -202,10 +210,15 @@ void AnaReaderMaster::initialize_dsets() {
       for (auto dsetIter = dsetNames.begin(); dsetIter != dsetNames.end(); ++dsetIter) {
         auto &dsetName = *dsetIter;
         sprintf(dset_path, "/%s/%5.5ld/%s", topGroup.c_str(), sub_group, dsetName.c_str());
-        std::cout << logHdr()  << "initialized dset for " << dset_path << std::endl;
-        m_topGroups[topGroup][sub_group][dsetName] = Dset::open(m_master_fid, dset_path);
+        if (verbose2) {
+          std::cout << logHdr()  << "initialized dset for " << dset_path << std::endl;
+        }
+        m_topGroups[topGroup][sub_group][dsetName] = Dset::open(m_master_fid, dset_path, Dset::if_vds_first_missing);
       }
     }
+  }
+  if (verbose1) {
+    std::cout << logHdr()  << "initialized dsets" << std::endl;
   }
 }
 
@@ -226,14 +239,14 @@ void AnaReaderMaster::close_dsets() {
 }
 
 
-long AnaReaderMaster::calc_event_checksum(long event_number) {
-  uint8_t * next_event_data = &m_event_data.at(0);
+int64_t AnaReaderMaster::calc_event_checksum(int64_t event_number) {
+  size_t next_idx = 0;
 
-  typedef enum {unknown, check_event_number, copy_cspad, copy_vlen_blob, copy_long} Action;
+  typedef enum {unknown, check_event_number, copy_cspad, copy_vlen_blob, copy_int64_t} Action;
 
   hsize_t count = 1;
-  std::vector<int64_t> value(count);
-
+  hsize_t bigger_buffer_to_be_safe = 10*count;
+  std::vector<int64_t> value(bigger_buffer_to_be_safe);
   for (auto topIter = m_top_group_2_num_subgroups.begin();
        topIter != m_top_group_2_num_subgroups.end(); ++topIter) {
 
@@ -249,7 +262,7 @@ long AnaReaderMaster::calc_event_checksum(long event_number) {
 
       auto &dsetName = *dsetNameIter;
 
-      Action action = copy_long;
+      Action action = copy_int64_t;
       if (dsetName == std::string("fiducials")) {
         action = check_event_number;
       } else if (dsetName == std::string("milli")) {
@@ -266,18 +279,24 @@ long AnaReaderMaster::calc_event_checksum(long event_number) {
           
         switch (action) {
         case check_event_number:
-          dset.read(event_index, count, value);
+          dset.read(event_index, count, value, true);
           if (value.at(0) != event_number) {
-            std::cerr << "check_event_number failure: " << topName 
+            std::cerr << "ERROR: check_event_number failure: " << topName 
                       << "/" << sub << "/" << dsetName << " value=" << value.at(0) 
                       << " != event_number=" << event_number << std::endl;
-            throw std::runtime_error("check_event_number failed");
+            //            throw std::runtime_error("check_event_number failed");
           }
           break;
-        case copy_long:
+        case copy_int64_t:
           dset.read(event_index, count, value);
-          *((int64_t *)next_event_data) = value.at(0);
-          next_event_data += sizeof(int64_t);
+          if (next_idx + 1 >= m_event_data.size()) {
+            std::cerr << "ERROR: copy_int64_t: m_event_data too short - it is " 
+                      << m_event_data.size() << " but need " 
+                      <<  (next_idx + 1) << " len." << std::endl;
+            throw std::runtime_error("copy_int64_t failed");
+          }
+          m_event_data.at(next_idx) = value.at(0);
+          next_idx += 1;
           break;
         case copy_cspad:
           break;
@@ -290,18 +309,19 @@ long AnaReaderMaster::calc_event_checksum(long event_number) {
     }
   }
 
-  long checksum = 0;
-  for (long *p = reinterpret_cast<long *>(m_event_data.data()); p < reinterpret_cast<long *>(next_event_data); ++p) {
-    checksum += *p;
+  size_t event_len_in_int64_ts = next_idx;
+  int64_t checksum = 0;
+  for (size_t idx = 0; idx < event_len_in_int64_ts; ++idx) {
+    checksum += m_event_data.at(idx);
   }
 
   return checksum;
 }
 
 
-long AnaReaderMaster::wait_for_all_dsets_to_get_to_at_least_length(long len) {
+int64_t AnaReaderMaster::wait_for_all_dsets_to_get_to_at_least_length(int64_t len) {
   hsize_t min_len_for_all = LLONG_MAX;
-  bool verbose = true;
+  bool verbose = m_config["verbose"].as<int>() >= 2;
 
   for (auto iter = m_group2dsets.begin(); iter != m_group2dsets.end(); ++iter) {
     auto &top_group_name = iter->first;
@@ -313,7 +333,7 @@ long AnaReaderMaster::wait_for_all_dsets_to_get_to_at_least_length(long len) {
       for (auto nameIter = dset_names.begin(); nameIter != dset_names.end(); ++nameIter) {
         auto &dset_name = *nameIter;
         auto &dset = name2dset[dset_name];
-        bool success = dset.wait(len,
+        bool success = dset.wait(std::min(1000l,101+len),
                                  m_wait_for_dsets_microsecond_pause,
                                  m_wait_for_dsets_timeout, verbose);
         bool timed_out = not success;
@@ -332,6 +352,7 @@ long AnaReaderMaster::wait_for_all_dsets_to_get_to_at_least_length(long len) {
 
 
 AnaReaderMaster::~AnaReaderMaster() {
+  std::cout << logHdr() << "done" << std::endl;
 }
 
 

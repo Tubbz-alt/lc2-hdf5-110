@@ -24,7 +24,9 @@ class DaqWriter : public DaqBase {
   int m_next_vlen_count;
   int m_vlen_max_per_shot;
   int m_next_cspad_in_source;
-  
+
+  int64_t m_last_cspad_written;
+
   std::map<int, hid_t> m_small_id_to_number_group,
     m_vlen_id_to_number_group,
     m_cspad_id_to_number_group;
@@ -103,7 +105,8 @@ DaqWriter::DaqWriter(int argc, char *argv[])
 
     m_next_vlen_count(0),
     m_vlen_max_per_shot(0),
-    m_next_cspad_in_source(0)
+    m_next_cspad_in_source(0),
+    m_last_cspad_written(-1)
 {
   YAML::Node cspad_config = m_process_config["datasets"]["round_robin"]["cspad"]["source"];
   std::string h5_filename = cspad_config["filename"].as<std::string>();
@@ -134,7 +137,9 @@ DaqWriter::DaqWriter(int argc, char *argv[])
 }
 
 
-DaqWriter::~DaqWriter() {}
+DaqWriter::~DaqWriter() {
+  std::cout << logHdr() << "done" << std::endl;
+}
 
 void DaqWriter::run() {
   DaqBase::run_setup();
@@ -170,7 +175,6 @@ void DaqWriter::create_file() {
   m_writer_fid = NONNEG( H5Fcreate(m_fname_h5.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, fapl) );
   if (m_config["verbose"].as<int>() > 0) {
     std::cout << logHdr() << "created file: " << m_fname_h5 << std::endl;
-    fflush(::stdout);
   }
   NONNEG( H5Pclose(fapl) );
 };
@@ -178,8 +182,6 @@ void DaqWriter::create_file() {
 
 void DaqWriter::close_all_groups_datasets() {
   std::cout << logHdr() << "close all groups datasets" << std::endl;
-  fflush(::stdout);
-  // need to implement? or is file close Ok?
 }
 
 
@@ -207,7 +209,6 @@ void DaqWriter::create_all_groups_datasets_and_attributes() {
   
   if (m_config["verbose"].as<int>() > 0) {
     std::cout << logHdr() << "created all groups and datasets: " << m_fname_h5 << std::endl;
-    fflush(::stdout);
   }
 };
 
@@ -284,7 +285,6 @@ void DaqWriter::start_SWMR_access_to_file() {
   NONNEG( H5Fstart_swmr_write(m_writer_fid) );
   if (m_config["verbose"].as<int>() > 0) {
     std::cout << logHdr() << "started SWMR access to writer file" << std::endl;
-    fflush(::stdout);
   }
 };
 
@@ -292,7 +292,6 @@ void DaqWriter::start_SWMR_access_to_file() {
 void DaqWriter::write(int64_t fiducial) {
   if (m_config["verbose"].as<int>()>= 2) {
     std::cout << logHdr() << "entering write" << fiducial << std::endl;
-    fflush(::stdout);
   }
   write_small(fiducial);
   write_vlen(fiducial);
@@ -308,7 +307,6 @@ void DaqWriter::write_small(int64_t fiducial) {
 
   if (m_config["verbose"].as<int>()>= 2) {
     std::cout << logHdr() << "  small " << fiducial << std::endl;
-    fflush(::stdout);
   }
   if (fiducial == m_next_small) {
     m_next_small += std::max(1, m_small_shot_stride);
@@ -338,7 +336,6 @@ void DaqWriter::write_vlen(int64_t fiducial) {
 
   if (m_config["verbose"].as<int>()>= 2) {
     std::cout << logHdr() << "  vlen" << fiducial << std::endl;
-    fflush(::stdout);
   }
 
   if (fiducial == m_next_vlen) {
@@ -383,10 +380,10 @@ void DaqWriter::write_cspad(int64_t fiducial) {
   if (fiducial != m_next_cspad) return;
 
   if (m_config["verbose"].as<int>()>= 2) {
-    std::cout << logHdr() << "cspad" << fiducial << std::endl;
-    fflush(::stdout);
+    std::cout << logHdr() << "cspad fiducial=" << fiducial << std::endl;
   }
-  
+  m_last_cspad_written = fiducial;
+
   m_next_cspad += std::max(1, m_cspad_shot_stride);
   m_next_cspad_in_source += 1;
   
@@ -428,10 +425,6 @@ void DaqWriter::flush_helper(const std::map<int, Dset> &id_to_dset) {
 
 
 void DaqWriter::flush_data(int64_t fiducial) {
-  if (m_config["verbose"].as<int>() > 0 ) {
-    std::cout << logHdr() << "flush_data: fiducial=" << fiducial << std::endl;
-    fflush(::stdout);
-  }
   flush_helper(m_small_id_to_fiducials_dset);
   flush_helper(m_small_id_to_milli_dset);
   flush_helper(m_small_id_to_data_dset);
@@ -445,6 +438,9 @@ void DaqWriter::flush_data(int64_t fiducial) {
   flush_helper(m_cspad_id_to_fiducials_dset);
   flush_helper(m_cspad_id_to_milli_dset);
   flush_helper(m_cspad_id_to_data_dset);
+  if (m_config["verbose"].as<int>() > 0 ) {
+    std::cout << logHdr() << "flush_data: fiducial=" << fiducial << " last_cspad_written:" << m_last_cspad_written << std::endl;
+  }
 };
 
 

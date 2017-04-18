@@ -22,10 +22,10 @@ for log in logs:
             else:
                 last_hdr_base = next_last_hdr_base
                 last_hdr_number = 0
-            ln = last_hdr_base + str(last_hdr_number) + ' ' + ' '.join(flds[2:])
+            ln = last_hdr_base + ('%3.3d' % last_hdr_number) + ' ' + ' '.join(flds[2:])
         else:
             last_hdr_number += 1
-            ln = last_hdr_base + str(last_hdr_number) + ' ' + ln
+            ln = last_hdr_base + ('%3.3d' % last_hdr_number) + ' ' + ln
         records.append(ln)
                            
 records.sort()

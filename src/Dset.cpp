@@ -113,7 +113,7 @@ std::vector<hsize_t> Dset::get_chunk(hid_t parent, hid_t dset) {
   return chunk;
 }
 
-Dset Dset::open(hid_t parent, const char *name) {
+Dset Dset::open(hid_t parent, const char *name, VDS_access vds_access) {
   // open and close the dataset in order to read the
   // dimensions, type and chunk size. We want a per
   // dataset cache of 3 types the chunk cache.
@@ -158,6 +158,12 @@ Dset Dset::open(hid_t parent, const char *name) {
   size_t rdcc_nbytes = chunk_cache_bytes;
   double rdcc_w0 = 0.75;
   NONNEG(H5Pset_chunk_cache(access_id, rdcc_nslots, rdcc_nbytes, rdcc_w0));
+  
+  if (vds_access == if_vds_first_missing) {
+    NONNEG( H5Pset_virtual_view( access_id, H5D_VDS_FIRST_MISSING) );
+  } else if (vds_access == if_vds_last_available) {
+    NONNEG( H5Pset_virtual_view( access_id, H5D_VDS_LAST_AVAILABLE) );
+  }
 
   hid_t dset_id = NONNEG(H5Dopen2(parent, name, access_id));
   NONNEG(H5Pclose(access_id));
@@ -258,7 +264,7 @@ void Dset::append(hsize_t start, hsize_t count, const std::vector<int64_t> &data
   generic_append(count, &data.at(start));
 }
 
-void Dset::generic_read(hsize_t start, hsize_t count, void *data) {
+void Dset::generic_read(hsize_t start, hsize_t count, void *data, bool verbose) {
   hid_t filespace = NONNEG( H5Dget_space(m_id) );
   file_space_select(filespace, start, count);
 
@@ -268,31 +274,41 @@ void Dset::generic_read(hsize_t start, hsize_t count, void *data) {
   hid_t memspace = NONNEG( H5Screate_simple(int(mem_dims.size()), &mem_dims.at(0), &mem_dims.at(0)));
   NONNEG( H5Sselect_all(memspace));
 
-  // print_h5_hyperslab(std::cout, "filespace", filespace);
-  // print_h5_simple(std::cout, "memspace", memspace);
+  //  NONNEG( H5Drefresh( id() ) );
+
+  if (verbose) {
+    dbgInfo(std::cout);
+    print_h5_hyperslab(std::cout, "filespace", filespace);
+    print_h5_simple(std::cout, "memspace", memspace);
+    std::cout << "data (before): 0x" << std::hex << *(int64_t *)data << std::dec << std::endl;
+  }
 
   NONNEG( H5Dread(m_id, m_type, memspace, filespace, H5P_DEFAULT, data));
+
+  if (verbose) {
+    std::cout << "data (after): 0x" << std::hex << *(int64_t *)data << std::dec << std::endl;
+  }
 
   NONNEG(H5Sclose(filespace));
   NONNEG(H5Sclose(memspace));
 
 }
 
-void Dset::read(hsize_t start, hsize_t count, std::vector<int64_t> &data) {
+void Dset::read(hsize_t start, hsize_t count, std::vector<int64_t> &data, bool verbose) {
   check_read(H5T_NATIVE_INT64, start, count);
   size_t data_len = count;
   for (unsigned idx = 1; idx < m_dims.size(); ++idx)  data_len *= m_dims.at(idx);
   data.resize(data_len);
-  generic_read(start, count, &data.at(0));
+  generic_read(start, count, &data.at(0), verbose);
 }
 
 
-void Dset::read(hsize_t start, hsize_t count, std::vector<int16_t> &data) {
+void Dset::read(hsize_t start, hsize_t count, std::vector<int16_t> &data, bool verbose) {
   check_read(H5T_NATIVE_INT16, start, count);
   size_t data_len = count;
   for (unsigned idx = 1; idx < m_dims.size(); ++idx)  data_len *= m_dims.at(idx);
   data.resize(data_len);
-  generic_read(start, count, &data.at(0));
+  generic_read(start, count, &data.at(0), verbose);
 }
 
 

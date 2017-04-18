@@ -130,11 +130,6 @@ class DaqBase {
                   const std::string &dataset,
                   int length,
                   std::vector<int16_t> &cspad_buffer);
-
-  bool smalls_write(int64_t fiducial);
-  bool vlens_write(int64_t fiducial);
-  bool cspads_write(int64_t fiducial, int &round_robin_writer_this_fiducial);
-
  public:
 
   /**

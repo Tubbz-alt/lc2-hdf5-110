@@ -38,7 +38,8 @@ class VDSRoundRobin {
  public:
   /**
    * create a VDS that is a round robin of the source datasets, over the first
-   slow dimension.
+   slow dimension. Uses the H5D_VDS_FIRST_MISSING to make sure clients see
+   a contigous view, with no missing values
   */
   VDSRoundRobin(hid_t vds_location,
                 const char * vds_dset_name,

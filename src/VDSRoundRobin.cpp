@@ -29,9 +29,14 @@ VDSRoundRobin::VDSRoundRobin(hid_t vds_location,
     select_unlimited_count_of_vds(vds_space, vds_start, vds_stride);
     add_to_virtual_mapping(vds_space, src_space, src);
   }
+  hid_t dapl_id = NONNEG( H5Pcreate(H5P_DATASET_ACCESS) );
+  // we don't want users to see missing values during SWMR, some sources
+  // could be late, they can wait for all sources in round robin to catch up
+  NONNEG( H5Pset_virtual_view( dapl_id, H5D_VDS_FIRST_MISSING) );
   m_vds_dset = H5Dcreate2(vds_location, vds_dset_name, m_h5type,
-                          vds_space, H5P_DEFAULT, m_vds_dcpl, H5P_DEFAULT);
+                          vds_space, H5P_DEFAULT, m_vds_dcpl, dapl_id );
   
+  NONNEG( H5Pclose( dapl_id ) );
   NONNEG( H5Sclose( vds_space ) );
   NONNEG( H5Sclose( src_space ) );
   cleanup();
@@ -153,11 +158,11 @@ void VDSRoundRobin::set_vds_fill_value()
 {
   if (m_h5type == -1) throw std::runtime_error("VDSRoundRobin:: h5type not set for fill");
 
-  char fill_H5T_NATIVE_CHAR = 0;
-  unsigned char fill_H5T_NATIVE_UCHAR = 0;
   signed char fill_H5T_NATIVE_SCHAR = -1;
+  unsigned char fill_H5T_NATIVE_UCHAR = 0;
+  char fill_H5T_NATIVE_CHAR = 0;
 
-  short fill_H5T_NATIVE_SHORT = 0;
+  short fill_H5T_NATIVE_SHORT = -1;
   unsigned short fill_H5T_NATIVE_USHORT = 0;
 
   int fill_H5T_NATIVE_INT = -1;
@@ -182,40 +187,58 @@ void VDSRoundRobin::set_vds_fill_value()
 
   if (0 < H5Tequal(H5T_NATIVE_CHAR, m_h5type)) {
     fill = &fill_H5T_NATIVE_CHAR;
+
   } else if (0 < H5Tequal(H5T_NATIVE_UCHAR, m_h5type)) {
     fill = &fill_H5T_NATIVE_UCHAR;
+
   } else if (0 < H5Tequal(H5T_NATIVE_SCHAR, m_h5type)) {
     fill = &fill_H5T_NATIVE_SCHAR;
+
   } else if (0 < H5Tequal(H5T_NATIVE_SHORT, m_h5type)) {
     fill = &fill_H5T_NATIVE_SHORT;
+
   } else if (0 < H5Tequal(H5T_NATIVE_USHORT, m_h5type)) {
     fill = &fill_H5T_NATIVE_USHORT;
+
   } else if (0 < H5Tequal(H5T_NATIVE_INT, m_h5type)) {
     fill = &fill_H5T_NATIVE_INT;
+
   } else if (0 < H5Tequal(H5T_NATIVE_UINT, m_h5type)) {
     fill = &fill_H5T_NATIVE_UINT;
+
   } else if (0 < H5Tequal(H5T_NATIVE_LONG, m_h5type)) {
     fill = &fill_H5T_NATIVE_LONG;
+
   } else if (0 < H5Tequal(H5T_NATIVE_ULONG, m_h5type)) {
     fill = &fill_H5T_NATIVE_ULONG;
+
   } else if (0 < H5Tequal(H5T_NATIVE_LLONG, m_h5type)) {
     fill = &fill_H5T_NATIVE_LLONG;
+
   } else if (0 < H5Tequal(H5T_NATIVE_ULLONG, m_h5type)) {
     fill = &fill_H5T_NATIVE_ULLONG;
+
   } else if (0 < H5Tequal(H5T_NATIVE_FLOAT, m_h5type)) {
     fill = &fill_H5T_NATIVE_FLOAT;
+
   } else if (0 < H5Tequal(H5T_NATIVE_DOUBLE, m_h5type)) {
     fill = &fill_H5T_NATIVE_DOUBLE;
+
   } else if (0 < H5Tequal(H5T_NATIVE_LDOUBLE, m_h5type)) {
     fill = &fill_H5T_NATIVE_LDOUBLE;
+
   } else if (0 < H5Tequal(H5T_NATIVE_HSIZE, m_h5type)) {
     fill = &fill_H5T_NATIVE_HSIZE;
+
   } else if (0 < H5Tequal(H5T_NATIVE_HSSIZE, m_h5type)) {
     fill = &fill_H5T_NATIVE_HSSIZE;
+
   } else if (0 < H5Tequal(H5T_NATIVE_HERR, m_h5type)) {
     fill = &fill_H5T_NATIVE_HERR;
+
   } else if (0 < H5Tequal(H5T_NATIVE_HBOOL, m_h5type)) {
     fill = &fill_H5T_NATIVE_HBOOL;
+
   } else {
     throw std::runtime_error("VDSRoundRobin: unknown datatype, can't create fill");
   }

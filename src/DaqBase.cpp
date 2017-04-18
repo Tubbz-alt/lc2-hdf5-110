@@ -166,27 +166,6 @@ void DaqBase::close_standard_groups() {
   NONNEG( H5Gclose( m_small_group ) );
 }
   
-bool DaqBase::smalls_write(int64_t fiducial) {
-  static int64_t shots_per_sample = m_config["single_source"]["small"]["shots_per_sample"].as<int64_t>();
-  return (fiducial % shots_per_sample == 0);
-}
-
-bool DaqBase::vlens_write(int64_t fiducial) {
-  static int64_t shots_per_sample = m_config["single_source"]["vlen"]["shots_per_sample"].as<int64_t>();
-  return (fiducial % shots_per_sample == 0);
-}
-
-bool DaqBase::cspads_write(int64_t fiducial, int &round_robin_writer_this_fiducial) {
-  static int64_t shots_per_sample_all = m_config["round_robin"]["cspad"]["shots_per_sample_all_writers"].as<int64_t>();
-  static int64_t num_writers = m_config["daq_writer"]["num"].as<int64_t>();
-  if (fiducial % shots_per_sample_all == 0) {
-    int64_t writer = (fiducial % num_writers);
-    round_robin_writer_this_fiducial = int(writer);
-    return true;
-  }
-  return false;
-}
-
 
 void DaqBase::load_cspad(const std::string &h5_filename,
                          const std::string &dataset,
@@ -195,7 +174,7 @@ void DaqBase::load_cspad(const std::string &h5_filename,
   size_t total = size_t(CSPadNumElem) * size_t(length);
   cspad_buffer.resize(total);
   hid_t fid = POS( H5Fopen(h5_filename.data(), H5F_ACC_RDONLY , H5P_DEFAULT) );
-  Dset dset = Dset::open(fid, dataset.data());
+  Dset dset = Dset::open(fid, dataset.data(), Dset::if_vds_first_missing);
   dset.read(0, length, cspad_buffer);
   dset.close();
   std::cout << logHdr() << "loaded cspad" << std::endl;

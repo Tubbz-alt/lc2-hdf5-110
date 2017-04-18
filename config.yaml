@@ -3,8 +3,8 @@ force: False
 rootdir: /reg/d/ana01/temp/davidsch/lc2
 rundir: runA
 num_samples: 1000
-verbose: 1
-flush_interval: 100
+verbose: 2
+flush_interval: 71
 writers_hang: False
 masters_hang: False
     
@@ -40,7 +40,7 @@ daq_writer:
     single_source:
       small:
         num_per_writer: 3
-        chunksize: 600
+        chunksize: 10 #600
         shots_per_sample: 1
       vlen:
         num_per_writer: 3
@@ -52,9 +52,6 @@ daq_writer:
 daq_master:
   num: 1
   num_per_host: 1
-  all_dsets_up_to_this_fiducial:
-    chunksize: 10
-    wait_for_dsets_microsecond_pause: -1
   hosts: 
     - local
   

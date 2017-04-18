@@ -29,7 +29,7 @@ protected:
   void check_read(hid_t type, hsize_t start, hsize_t count);
   void file_space_select(hid_t file_space, hsize_t start, hsize_t count);
   void generic_append(hsize_t count, const void *data);
-  void generic_read(hsize_t start, hsize_t count, void *data);
+  void generic_read(hsize_t start, hsize_t count, void *data, bool verbose=false);
   std::ostream & dbgInfo(std::ostream &o);
 
 public:
@@ -37,6 +37,9 @@ public:
   Dset(const Dset &o) = default;
   Dset &operator=(const Dset &o) = default;
   ~Dset() {};
+
+  // for opening, it might be a VDS. Let user determine access.
+  enum VDS_access {if_vds_first_missing, if_vds_last_available};
 
   // accessors
   hid_t id() const { return m_id; }
@@ -48,13 +51,13 @@ public:
   void append(hsize_t start, hsize_t count, const std::vector<int64_t> &data);
   void append(hsize_t start, hsize_t count, const std::vector<int16_t> &data);
 
-	void read(hsize_t start, hsize_t count, std::vector<int64_t> &data);
-	void read(hsize_t start, hsize_t count, std::vector<int16_t> &data);
+	void read(hsize_t start, hsize_t count, std::vector<int64_t> &data, bool verbose=false);
+	void read(hsize_t start, hsize_t count, std::vector<int16_t> &data, bool verbose=false);
 
   bool wait(hsize_t len_to_grow_to, int microseconds_to_pause, int timeout_seconds, bool verbose);
 
   static Dset create(hid_t parent, const char *name, hid_t h5type, const std::vector<hsize_t> &chunk);
-  static Dset open(hid_t parent, const char *name);
+  static Dset open(hid_t parent, const char *name, VDS_access vds_access);
   static std::vector<hsize_t> get_chunk(const std::string & fname, const std::string &dset);
   static std::vector<hsize_t> get_chunk(hid_t parent, const std::string &dset);
   static std::vector<hsize_t> get_chunk(hid_t parent, hid_t dset);
