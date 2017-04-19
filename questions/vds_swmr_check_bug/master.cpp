@@ -49,6 +49,11 @@ int main(int argc, const char *argv[]) {
   H5Pset_virtual_view( access_id, H5D_VDS_FIRST_MISSING);
   hid_t dset = H5Dcreate2(fid, "vds", H5T_NATIVE_INT64, vds_space, 
                           H5P_DEFAULT, dcpl, access_id);
+
+  // don't know if I need this since the master is not updating the file and is about to 
+  // close it
+  H5Fstart_swmr_write(fid);
+
   H5Dclose(dset);
   H5Pclose(access_id);
   H5Sclose(src_space);
@@ -56,6 +61,8 @@ int main(int argc, const char *argv[]) {
   H5Pclose(dcpl);
   H5Fclose(fid);
   H5Pclose(fapl);
+
+  std::cout << "master done" << std::endl;
   return 0;
 }
 

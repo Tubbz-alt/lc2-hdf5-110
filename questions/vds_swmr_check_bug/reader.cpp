@@ -134,5 +134,7 @@ int main(int argc, char *argv[]) {
   }
   H5Dclose(dset);
   H5Fclose(fid);
+  std::cout << "reader " << reader << " done" << std::endl;
+  return 0;
 }
 

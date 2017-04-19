@@ -52,5 +52,8 @@ int main(int argc, char *argv[]) {
   H5Sclose(space_id);
   H5Fclose(fid);
   H5Pclose(fapl);
+
+  std::cout << "writer " << writer << " done" << std::endl;
+  return 0;
 }
 
