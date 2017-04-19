@@ -7,9 +7,10 @@ const int64_t writer_len = 400;
 const int num_writers = 3;
 const int64_t num_readers = 2;
 const int64_t master_len = num_writers * writer_len;
-const hsize_t chunk_size = 600;
-const int microseconds_between_writes = 6;
+const hsize_t chunk_size = 100;
+const int microseconds_between_writes = 20;
 const int microseconds_between_reader_wait = 3;
+const int microseconds_between_master_wait = 1;
 const int64_t flush_interval = 100; 
 
 int max_seconds_reader_waits_for_master = 10;

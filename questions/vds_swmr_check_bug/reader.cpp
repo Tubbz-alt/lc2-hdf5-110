@@ -7,6 +7,7 @@
 
 #include "params.h"
 
+namespace {
 hid_t H5Fopen_with_polling(const char *fname, unsigned flags, hid_t fapl_id) {
   const int one_second_in_milliseconds = 1000000;
   int waited_so_far = 0;
@@ -100,6 +101,7 @@ int64_t read_from_dset(hid_t dset, hsize_t idx) {
 
   return data;
 }
+}; // local namespace
 
 int main(int argc, char *argv[]) {
   if (argc != 3) {
