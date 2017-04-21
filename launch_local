@@ -7,9 +7,9 @@ rm $LOC/logs/*
 bin/daq_writer config.yaml 0 > $LOC/logs/daq_writer_0.log 2>&1 &
 bin/daq_writer config.yaml 1 > $LOC/logs/daq_writer_1.log 2>&1 &
 bin/daq_writer config.yaml 2 > $LOC/logs/daq_writer_2.log 2>&1 &
-#sleep 1
+
 bin/daq_master config.yaml 0  > $LOC/logs/daq_master_0.log 2>&1 &
-#sleep 1
+
 bin/ana_reader_master config.yaml 0  > $LOC/logs/ana_reader_master_0.log 2>&1 &
 bin/ana_reader_master config.yaml 1  > $LOC/logs/ana_reader_master_1.log 2>&1 &
 python wait_for_finished.py $LOC ana_reader_master-s0000.finished ana_reader_master-s0001.finished

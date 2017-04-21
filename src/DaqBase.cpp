@@ -166,6 +166,81 @@ void DaqBase::close_standard_groups() {
   NONNEG( H5Gclose( m_small_group ) );
 }
   
+bool DaqBase::small_writes(int64_t event) {
+  static int64_t stride = m_config["daq_writer"]["datasets"]["single_source"]["small"]["shots_per_sample"].as<int64_t>();
+  return (event % stride == 0);
+}
+
+bool DaqBase::vlen_writes(int64_t event) {
+  static int64_t stride = m_config["daq_writer"]["datasets"]["single_source"]["vlen"]["shots_per_sample"].as<int64_t>();
+  return (event % stride == 0);
+}
+
+bool DaqBase::cspad_roundrobin_writes(int64_t event, int *writerOutput) {
+  static int64_t stride_all = m_config["daq_writer"]["datasets"]["round_robin"]["cspad"]["shots_per_sample_all_writers"].as<int64_t>();
+  static int64_t num_writers = m_config["daq_writer"]["num"].as<int64_t>();
+  for (int64_t writer = 0; writer < num_writers; ++writer) {
+    bool writer_writes = (writer == event % (num_writers * stride_all));
+    if (writer_writes) {
+      if (writerOutput) *writerOutput = int(writer);
+      return true;
+    }
+  }
+  if (writerOutput) *writerOutput = -1;
+  return false;
+}
+
+int64_t DaqBase::small_single_source_len_to_avail_event(int64_t dim) {
+  static int64_t stride = m_config["daq_writer"]["datasets"]["single_source"]["small"]["shots_per_sample"].as<int64_t>();
+  if (dim<=0) return -1;
+  int64_t idx = dim-1;
+  return idx * stride;
+}
+
+int64_t DaqBase::vlen_single_source_len_to_avail_event(int64_t dim) {
+  static int64_t stride = m_config["daq_writer"]["datasets"]["single_source"]["vlen"]["shots_per_sample"].as<int64_t>();
+  if (dim<=0) return -1;
+  int64_t idx = dim-1;
+  return idx * stride;
+}
+
+int64_t DaqBase::cspad_round_robin_len_to_avail_event(int64_t dim, int writer) {
+  static int64_t stride_all = m_config["daq_writer"]["datasets"]["round_robin"]["cspad"]["shots_per_sample_all_writers"].as<int64_t>();
+  static int64_t num_writers = m_config["daq_writer"]["num"].as<int64_t>();
+  static int64_t stride = stride_all*num_writers;
+  if (dim<=0) return -1;
+  int64_t idx = dim-1;
+  return idx * stride + writer;
+}
+
+// pass "small", "vlen", etc, return -1 if this event not writen
+int64_t DaqBase::get_event_idx_in_master(const std::string &topName, int64_t event) {
+  static int64_t small_stride = m_config["daq_writer"]["datasets"]["single_source"]["small"]["shots_per_sample"].as<int64_t>();
+  static int64_t vlen_stride = m_config["daq_writer"]["datasets"]["single_source"]["vlen"]["shots_per_sample"].as<int64_t>();
+  static int64_t cspad_rr_stride_all = m_config["daq_writer"]["datasets"]["round_robin"]["cspad"]["shots_per_sample_all_writers"].as<int64_t>();
+  static int64_t num_writers = m_config["daq_writer"]["num"].as<int64_t>();
+  
+  static const std::string small("small"), vlen("vlen"), cspad("cspad");
+  
+  if (topName == small) {
+    if (0 == event % small_stride) return event / small_stride;
+    return -1;
+  }
+  
+  if (topName == vlen) {
+    if (0 == event % vlen_stride) return event / vlen_stride;
+    return -1;
+  }
+  
+  if (topName == cspad) {
+    int64_t block = event / num_writers;
+    if (0 == (block % cspad_rr_stride_all)) {
+      return num_writers * block + (event % num_writers);
+    }
+    return -1;
+  }
+  throw std::runtime_error("unknown topName for get_event_idx_in_master");
+}
 
 void DaqBase::load_cspad(const std::string &h5_filename,
                          const std::string &dataset,

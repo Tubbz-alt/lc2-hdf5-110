@@ -32,6 +32,8 @@ daq_writer:
         num: 1
         chunksize: 1
         shots_per_sample_all_writers: 1
+        # writer ii will write it's kth output for event = 
+        #   ii + k * (num_writers * shots_per_sample_all_writers)
         dim:
           - 32
           - 185
@@ -42,6 +44,7 @@ daq_writer:
         num_per_writer: 3
         chunksize: 10 #600
         shots_per_sample: 1
+        # all writers will write at 0, shots_per_sample, ..., k*shots_per_sample
       vlen:
         num_per_writer: 3
         chunksize: 600
@@ -52,6 +55,8 @@ daq_writer:
 daq_master:
   num: 1
   num_per_host: 1
+  wait_microseconds: 1
+  time_out_seconds: 10
   hosts: 
     - local
   

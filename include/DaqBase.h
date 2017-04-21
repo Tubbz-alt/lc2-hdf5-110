@@ -118,6 +118,18 @@ class DaqBase {
   void create_number_groups(hid_t parent, TSubMap &sub_map, int first, int count);
   void close_number_groups(TSubMap &sub_map);
   void close_standard_groups();
+
+  bool small_writes(int64_t event);
+  bool vlen_writes(int64_t event);
+  bool cspad_roundrobin_writes(int64_t event, int *writerOutput=NULL);
+  
+  // pass "small", "vlen", etc, return -1 if this event not writen
+  int64_t get_event_idx_in_master(const std::string &topName, int64_t event);
+
+  int64_t small_single_source_len_to_avail_event(int64_t dim);
+  int64_t vlen_single_source_len_to_avail_event(int64_t dim);
+  int64_t cspad_round_robin_len_to_avail_event(int64_t dim, int writer);
+
   std::string logHdr();
 
   std::string form_fullpath(std::string process, int idx, enum Location location);

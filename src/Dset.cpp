@@ -332,7 +332,7 @@ bool Dset::wait(hsize_t len_to_grow_to, int microseconds_to_pause, int timeout_s
   auto t0 = std::chrono::system_clock::now();
   
   while (true) {
-    if (m_dims[0] >= len_to_grow_to) {
+    if (m_dims.at(0) >= len_to_grow_to) {
       if (verbose) {
         dbgInfo(std::cout) << "wait returning true, len_to_grow_to=" << len_to_grow_to << std::endl;
       }
@@ -352,9 +352,18 @@ bool Dset::wait(hsize_t len_to_grow_to, int microseconds_to_pause, int timeout_s
       }
     }
 
+    const hsize_t GUARD = 0xa0b0c0d0e0f0;
     NONNEG( H5Drefresh(m_id) );
     std::vector<hsize_t> old = m_dims;
-    NONNEG( H5LDget_dset_dims(m_id, &m_dims.at(0)) );
+    std::vector<hsize_t> new_dims(old.size()+3);
+    new_dims.at(old.size()) = GUARD;
+    NONNEG( H5LDget_dset_dims(m_id, &new_dims.at(0)) );
+    if (new_dims.at(old.size()) != GUARD) {
+      dbgInfo(std::cout) << "ERROR: H5LDget_dset_dims memory corruption, at element " << old.size() 
+                         << " we have the value: 0x" << std::hex << new_dims.at(old.size())
+                         << " but we should have: 0x" << std::hex << GUARD << std::dec << std::endl; 
+    }
+    for (size_t idx=0; idx < m_dims.size(); ++idx) m_dims[idx]=new_dims[idx];
     if (verbose) {
       dbgInfo(std::cout) << "called H5Drefresh/H5LDget_dset_dims - old=" << old << " new=" << m_dims << std::endl;
     }
